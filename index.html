@@ -163,6 +163,34 @@
 
   const CONTRACT_ABI = [
     {
+      "anonymous": false,
+      "inputs": [
+        { "indexed": true, "internalType": "uint256", "name": "itemId", "type": "uint256" },
+        { "indexed": true, "internalType": "address", "name": "owner", "type": "address" },
+        { "indexed": false, "internalType": "string", "name": "itemName", "type": "string" }
+      ],
+      "name": "ItemRegistered", "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        { "indexed": true, "internalType": "uint256", "name": "itemId", "type": "uint256" },
+        { "indexed": false, "internalType": "string", "name": "serviceType", "type": "string" },
+        { "indexed": false, "internalType": "string", "name": "technician", "type": "string" },
+        { "indexed": false, "internalType": "uint256", "name": "timestamp", "type": "uint256" }
+      ],
+      "name": "ServiceAdded", "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        { "indexed": true, "internalType": "uint256", "name": "itemId", "type": "uint256" },
+        { "indexed": true, "internalType": "address", "name": "oldOwner", "type": "address" },
+        { "indexed": true, "internalType": "address", "name": "newOwner", "type": "address" }
+      ],
+      "name": "ItemTransferred", "type": "event"
+    },
+    {
       "inputs": [{ "internalType": "string", "name": "itemName", "type": "string" }],
       "name": "registerItem",
       "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
