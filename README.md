@@ -1,0 +1,2 @@
+# motolog
+amba
