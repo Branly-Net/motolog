@@ -1,2986 +1,429 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="id">
-  <head>
-    <meta charset="UTF-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
-    />
-    <title>MotoLog — Blockchain-Verified Motorcycle Service History</title>
-    <meta
-      name="description"
-      content="MotoLog menyimpan riwayat servis sepeda motor di BOT Chain sehingga mudah diverifikasi dan sulit dimanipulasi."
-    />
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ServiTrace — On-Chain Service History Log</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --card: #171a21;
+    --border: #2a2e38;
+    --text: #e6e8ec;
+    --muted: #9aa0ac;
+    --accent: #ff5a36;
+    --accent-hover: #ff7a5c;
+    --success: #3ecf8e;
+    --error: #ff5f5f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 24px 16px 60px;
+  }
+  .wrap { max-width: 640px; margin: 0 auto; }
+  header { text-align: center; margin-bottom: 24px; }
+  header h1 { font-size: 1.6rem; margin: 0 0 4px; }
+  header p { color: var(--muted); font-size: 0.9rem; margin: 0; }
 
-    <!-- ethers.js DIMUAT DI HEAD (sebelum app script) supaya library siap saat dipakai -->
-    <script
-      src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"
-      defer
-    ></script>
+  #walletBar {
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 12px; padding: 12px 16px; margin-bottom: 20px;
+  }
+  #walletStatus { font-size: 0.85rem; color: var(--muted); }
+  #walletStatus.connected { color: var(--success); }
+  button {
+    background: var(--accent); color: #fff; border: none;
+    padding: 10px 18px; border-radius: 8px; font-size: 0.9rem;
+    cursor: pointer; font-weight: 600; transition: background 0.15s;
+  }
+  button:hover { background: var(--accent-hover); }
+  button:disabled { background: #444; cursor: not-allowed; }
 
-    <style>
-      /* =====================================================
-         DESIGN TOKENS
-         ===================================================== */
-      :root {
-        --bg: #0e1013;
-        --bg-soft: #14171c;
-        --card: #171a20;
-        --card-2: #0c0e12;
-        --border: #262a33;
-        --border-soft: #1e222a;
-        --text: #e9ebef;
-        --muted: #9aa2b1;
-        --accent: #ff5a36;
-        --accent-hover: #ff7454;
-        --success: #35cf8d;
-        --warning: #f5b544;
-        --error: #ff5f5f;
-        --radius: 14px;
-        --radius-sm: 10px;
-        --maxw: 1140px;
-        --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
-      }
+  .card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 14px; padding: 20px; margin-bottom: 20px;
+  }
+  .card h2 { font-size: 1.05rem; margin: 0 0 6px; }
+  .card .hint { font-size: 0.78rem; color: var(--muted); margin: 0 0 14px; }
+  label {
+    display: block; font-size: 0.8rem; color: var(--muted);
+    margin: 10px 0 4px;
+  }
+  input {
+    width: 100%; padding: 10px 12px; border-radius: 8px;
+    border: 1px solid var(--border); background: #0c0e12; color: var(--text);
+    font-size: 0.9rem;
+  }
+  input:focus { outline: 1px solid var(--accent); }
+  .actions { margin-top: 16px; display: flex; gap: 10px; flex-wrap: wrap; }
+  .register-actions { align-items: center; }
+  .generated-id {
+    display: inline-flex; align-items: center; min-height: 38px;
+    padding: 8px 12px; border: 1px solid var(--border);
+    border-radius: 8px; background: #0c0e12; color: var(--success);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-weight: 700; letter-spacing: 0.08em;
+  }
+  .generated-id:empty { display: none; }
 
-      * {
-        box-sizing: border-box;
-      }
-      html {
-        scroll-behavior: smooth;
-        scroll-padding-top: 84px;
-      }
-      body {
-        margin: 0;
-        font-family:
-          "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-          Helvetica, Arial, sans-serif;
-        background: var(--bg);
-        color: var(--text);
-        line-height: 1.6;
-        -webkit-font-smoothing: antialiased;
-      }
-      h1,
-      h2,
-      h3 {
-        line-height: 1.25;
-        margin: 0;
-        letter-spacing: -0.02em;
-      }
-      a {
-        color: var(--accent);
-      }
-      .container {
-        max-width: var(--maxw);
-        margin: 0 auto;
-        padding: 0 20px;
-      }
-      .section {
-        padding: 72px 0;
-        border-top: 1px solid var(--border-soft);
-      }
-      .section-head {
-        margin-bottom: 28px;
-      }
-      .eyebrow {
-        font-size: 0.72rem;
-        letter-spacing: 0.14em;
-        text-transform: uppercase;
-        color: var(--accent);
-        font-weight: 700;
-        margin-bottom: 8px;
-      }
-      .section-head h2 {
-        font-size: 1.6rem;
-      }
-      .section-head p {
-        color: var(--muted);
-        margin: 8px 0 0;
-        max-width: 60ch;
-      }
+  #log {
+    font-size: 0.8rem; padding: 10px 12px; border-radius: 8px;
+    margin-top: 12px; display: none; word-break: break-word;
+  }
+  .log.show { display: block; }
+  .log.ok { background: rgba(62,207,142,0.1); border: 1px solid var(--success); color: var(--success); }
+  .log.err { background: rgba(255,95,95,0.1); border: 1px solid var(--error); color: var(--error); }
 
-      /* =====================================================
-         BUTTONS
-         ===================================================== */
-      .btn {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        gap: 8px;
-        background: var(--accent);
-        color: #fff;
-        border: 1px solid transparent;
-        padding: 11px 20px;
-        border-radius: var(--radius-sm);
-        font-size: 0.9rem;
-        font-weight: 600;
-        font-family: inherit;
-        cursor: pointer;
-        transition:
-          background 0.15s ease,
-          transform 0.1s ease,
-          border-color 0.15s ease;
-        text-decoration: none;
-      }
-      .btn:hover:not(:disabled) {
-        background: var(--accent-hover);
-      }
-      .btn:active:not(:disabled) {
-        transform: translateY(1px);
-      }
-      .btn:focus-visible {
-        outline: 2px solid var(--accent);
-        outline-offset: 2px;
-      }
-      .btn:disabled {
-        opacity: 0.55;
-        cursor: not-allowed;
-      }
-      .btn-ghost {
-        background: transparent;
-        border-color: var(--border);
-        color: var(--text);
-      }
-      .btn-ghost:hover:not(:disabled) {
-        background: var(--bg-soft);
-        border-color: #39404d;
-      }
-      .btn-sm {
-        padding: 8px 14px;
-        font-size: 0.82rem;
-      }
-      .btn-block {
-        width: 100%;
-      }
+  .item-info {
+    background: #0c0e12; border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px; margin-top: 14px; font-size: 0.85rem;
+  }
+  .item-info div { margin-bottom: 4px; }
+  .item-info .label { color: var(--muted); display: inline-block; width: 90px; }
 
-      /* =====================================================
-         NAVBAR
-         ===================================================== */
-      .nav {
-        position: sticky;
-        top: 0;
-        z-index: 50;
-        background: rgba(14, 16, 19, 0.88);
-        backdrop-filter: blur(12px);
-        border-bottom: 1px solid var(--border-soft);
-        padding-top: env(safe-area-inset-top, 0px);
-      }
-      .nav-inner {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        height: 64px;
-        gap: 16px;
-      }
-      .brand {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        font-weight: 800;
-        font-size: 1.05rem;
-        letter-spacing: -0.02em;
-        color: var(--text);
-        text-decoration: none;
-      }
-      .brand-mark {
-        width: 30px;
-        height: 30px;
-        border-radius: 9px;
-        background: linear-gradient(140deg, var(--accent), #c9341a);
-        display: grid;
-        place-items: center;
-        font-size: 15px;
-      }
-      .nav-links {
-        display: flex;
-        align-items: center;
-        gap: 4px;
-        list-style: none;
-        margin: 0;
-        padding: 0;
-      }
-      .nav-links a {
-        display: block;
-        padding: 8px 12px;
-        font-size: 0.88rem;
-        color: var(--muted);
-        text-decoration: none;
-        border-radius: 8px;
-        font-weight: 500;
-      }
-      .nav-links a:hover {
-        color: var(--text);
-        background: var(--bg-soft);
-      }
-      .nav-actions {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-      }
-      .nav-toggle {
-        display: none;
-        background: transparent;
-        border: 1px solid var(--border);
-        color: var(--text);
-        border-radius: 9px;
-        width: 40px;
-        height: 40px;
-        cursor: pointer;
-        font-size: 1.1rem;
-      }
+  .record {
+    background: #0c0e12; border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px; margin-top: 10px; font-size: 0.85rem;
+  }
+  .record .type { font-weight: 700; color: var(--accent); }
+  .record .meta { color: var(--muted); font-size: 0.78rem; margin-top: 4px; }
+  .empty-state { color: var(--muted); font-size: 0.85rem; text-align: center; padding: 16px 0; }
 
-      /* =====================================================
-         WALLET PILL
-         ===================================================== */
-      .wallet-pill {
-        display: none;
-        align-items: center;
-        gap: 10px;
-        background: var(--card);
-        border: 1px solid var(--border);
-        border-radius: 999px;
-        padding: 6px 8px 6px 14px;
-        font-size: 0.8rem;
-      }
-      .wallet-pill.is-visible {
-        display: flex;
-      }
-      .wallet-dot {
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        background: var(--success);
-        flex-shrink: 0;
-      }
-      .wallet-addr {
-        font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-      }
-      .wallet-bal {
-        color: var(--muted);
-        border-left: 1px solid var(--border);
-        padding-left: 10px;
-      }
+  footer {
+    text-align: center; margin-top: 30px; padding-top: 16px;
+    border-top: 1px solid var(--border); font-size: 0.75rem; color: var(--muted);
+  }
+  footer a { color: var(--accent); text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
 
-      /* =====================================================
-         NETWORK BANNER
-         ===================================================== */
-      .net-banner {
-        display: none;
-        background: rgba(245, 181, 68, 0.1);
-        border-bottom: 1px solid rgba(245, 181, 68, 0.35);
-      }
-      .net-banner.is-visible {
-        display: block;
-      }
-      .net-banner-inner {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        flex-wrap: wrap;
-        gap: 12px;
-        padding: 12px 20px;
-        font-size: 0.86rem;
-        color: var(--warning);
-        text-align: center;
-      }
+  <header>
+    <h1>🔧 ServiTrace</h1>
+    <p>On-chain service history log — riwayat servis yang tidak bisa hilang atau dipalsukan</p>
+  </header>
 
-      /* =====================================================
-         HERO
-         ===================================================== */
-      .hero {
-        padding: 84px 0 72px;
-      }
-      .hero-grid {
-        display: grid;
-        grid-template-columns: 1.15fr 0.85fr;
-        gap: 48px;
-        align-items: center;
-      }
-      .hero h1 {
-        font-size: clamp(2rem, 5vw, 3.1rem);
-        margin-bottom: 18px;
-      }
-      .hero h1 span {
-        color: var(--accent);
-      }
-      .hero p.sub {
-        font-size: 1.05rem;
-        color: var(--muted);
-        max-width: 48ch;
-        margin: 0 0 28px;
-      }
-      .hero-cta {
-        display: flex;
-        gap: 12px;
-        flex-wrap: wrap;
-      }
-      .hero-meta {
-        display: flex;
-        gap: 24px;
-        flex-wrap: wrap;
-        margin-top: 34px;
-        padding-top: 24px;
-        border-top: 1px solid var(--border-soft);
-      }
-      .hero-meta div span {
-        display: block;
-      }
-      .hero-meta .k {
-        font-size: 1.25rem;
-        font-weight: 700;
-      }
-      .hero-meta .v {
-        font-size: 0.76rem;
-        color: var(--muted);
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-      }
+  <div id="walletBar">
+    <span id="walletStatus">Wallet belum terhubung</span>
+    <button id="connectBtn">Connect Wallet</button>
+  </div>
 
-      .wallet-panel {
-        background: var(--card);
-        border: 1px solid var(--border);
-        border-radius: var(--radius);
-        padding: 24px;
-        box-shadow: var(--shadow);
-      }
-      .wallet-panel h3 {
-        font-size: 1rem;
-        margin-bottom: 4px;
-      }
-      .wallet-panel .hint {
-        font-size: 0.83rem;
-        color: var(--muted);
-        margin: 0 0 18px;
-      }
-      .wallet-row {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: 12px;
-        padding: 11px 0;
-        border-bottom: 1px solid var(--border-soft);
-        font-size: 0.86rem;
-      }
-      .wallet-row:last-of-type {
-        border-bottom: none;
-      }
-      .wallet-row .lbl {
-        color: var(--muted);
-      }
-      .wallet-row .val {
-        font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-        text-align: right;
-        word-break: break-all;
-      }
-      .status-chip {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        font-size: 0.74rem;
-        font-weight: 700;
-        padding: 3px 10px;
-        border-radius: 999px;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-      }
-      .chip-off {
-        background: rgba(154, 162, 177, 0.14);
-        color: var(--muted);
-      }
-      .chip-on {
-        background: rgba(53, 207, 141, 0.14);
-        color: var(--success);
-      }
-      .chip-warn {
-        background: rgba(245, 181, 68, 0.14);
-        color: var(--warning);
-      }
-      .chip-err {
-        background: rgba(255, 95, 95, 0.14);
-        color: var(--error);
-      }
-
-      /* =====================================================
-         CARDS / GRID
-         ===================================================== */
-      .card {
-        background: var(--card);
-        border: 1px solid var(--border);
-        border-radius: var(--radius);
-        padding: 22px;
-      }
-      .moto-grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 20px;
-      }
-      .moto-head {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
-        gap: 12px;
-        margin-bottom: 18px;
-      }
-      .moto-head h3 {
-        font-size: 1.3rem;
-      }
-      .moto-head .plate {
-        font-size: 0.82rem;
-        color: var(--muted);
-        margin-top: 4px;
-      }
-      .spec-list {
-        display: grid;
-        gap: 2px;
-      }
-      .spec-row {
-        display: flex;
-        justify-content: space-between;
-        gap: 12px;
-        padding: 9px 0;
-        border-bottom: 1px solid var(--border-soft);
-        font-size: 0.86rem;
-      }
-      .spec-row:last-child {
-        border-bottom: none;
-      }
-      .spec-row .lbl {
-        color: var(--muted);
-      }
-      .spec-row .val {
-        font-weight: 600;
-        text-align: right;
-        word-break: break-word;
-      }
-      .mask {
-        font-family: ui-monospace, Menlo, Consolas, monospace;
-        letter-spacing: 0.06em;
-      }
-
-      .stat-grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 14px;
-      }
-      .stat {
-        background: var(--card-2);
-        border: 1px solid var(--border-soft);
-        border-radius: var(--radius-sm);
-        padding: 16px;
-      }
-      .stat .num {
-        font-size: 1.5rem;
-        font-weight: 700;
-        letter-spacing: -0.02em;
-      }
-      .stat .cap {
-        font-size: 0.74rem;
-        color: var(--muted);
-        text-transform: uppercase;
-        letter-spacing: 0.07em;
-        margin-top: 2px;
-      }
-
-      /* =====================================================
-         FORM
-         ===================================================== */
-      .field {
-        margin-bottom: 14px;
-      }
-      .field label {
-        display: block;
-        font-size: 0.78rem;
-        color: var(--muted);
-        margin-bottom: 6px;
-        font-weight: 600;
-        letter-spacing: 0.02em;
-      }
-      .field input,
-      .field select,
-      .field textarea {
-        width: 100%;
-        padding: 11px 13px;
-        border-radius: var(--radius-sm);
-        border: 1px solid var(--border);
-        background: var(--card-2);
-        color: var(--text);
-        font-size: 0.9rem;
-        font-family: inherit;
-      }
-      .field textarea {
-        min-height: 78px;
-        resize: vertical;
-      }
-      .field input:focus,
-      .field select:focus,
-      .field textarea:focus {
-        outline: none;
-        border-color: var(--accent);
-        box-shadow: 0 0 0 3px rgba(255, 90, 54, 0.15);
-      }
-      .field .help {
-        font-size: 0.74rem;
-        color: var(--muted);
-        margin-top: 5px;
-      }
-      .field-row {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 14px;
-      }
-
-      /* =====================================================
-         INLINE STATUS (pengganti alert)
-         ===================================================== */
-      .inline-status {
-        display: none;
-        align-items: flex-start;
-        gap: 10px;
-        font-size: 0.84rem;
-        padding: 12px 14px;
-        border-radius: var(--radius-sm);
-        margin-top: 14px;
-        word-break: break-word;
-      }
-      .inline-status.is-visible {
-        display: flex;
-      }
-      .inline-status .ico {
-        flex-shrink: 0;
-        line-height: 1.5;
-      }
-      .inline-status .body {
-        flex: 1;
-        min-width: 0;
-      }
-      .st-info {
-        background: rgba(154, 162, 177, 0.1);
-        border: 1px solid var(--border);
-        color: var(--muted);
-      }
-      .st-ok {
-        background: rgba(53, 207, 141, 0.1);
-        border: 1px solid rgba(53, 207, 141, 0.4);
-        color: var(--success);
-      }
-      .st-warn {
-        background: rgba(245, 181, 68, 0.1);
-        border: 1px solid rgba(245, 181, 68, 0.4);
-        color: var(--warning);
-      }
-      .st-err {
-        background: rgba(255, 95, 95, 0.1);
-        border: 1px solid rgba(255, 95, 95, 0.4);
-        color: var(--error);
-      }
-      .tx-line {
-        margin-top: 8px;
-        font-family: ui-monospace, Menlo, Consolas, monospace;
-        font-size: 0.78rem;
-        word-break: break-all;
-      }
-      .spinner {
-        display: inline-block;
-        width: 13px;
-        height: 13px;
-        border: 2px solid currentColor;
-        border-top-color: transparent;
-        border-radius: 50%;
-        animation: spin 0.7s linear infinite;
-        vertical-align: -2px;
-      }
-      @keyframes spin {
-        to {
-          transform: rotate(360deg);
-        }
-      }
-
-      /* =====================================================
-         TOAST (pengganti alert)
-         ===================================================== */
-      .toast-stack {
-        position: fixed;
-        right: 16px;
-        bottom: calc(16px + env(safe-area-inset-bottom, 0px));
-        z-index: 200;
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-        width: min(360px, calc(100vw - 32px));
-        pointer-events: none;
-      }
-      .toast {
-        pointer-events: auto;
-        background: var(--card);
-        border: 1px solid var(--border);
-        border-left: 3px solid var(--muted);
-        border-radius: var(--radius-sm);
-        padding: 13px 15px;
-        font-size: 0.85rem;
-        box-shadow: var(--shadow);
-        display: flex;
-        gap: 10px;
-        align-items: flex-start;
-        animation: toastIn 0.22s ease;
-      }
-      .toast.t-ok {
-        border-left-color: var(--success);
-      }
-      .toast.t-err {
-        border-left-color: var(--error);
-      }
-      .toast.t-warn {
-        border-left-color: var(--warning);
-      }
-      .toast.t-info {
-        border-left-color: var(--accent);
-      }
-      .toast .t-body {
-        flex: 1;
-        min-width: 0;
-        word-break: break-word;
-      }
-      .toast .t-title {
-        font-weight: 700;
-        margin-bottom: 2px;
-      }
-      .toast .t-msg {
-        color: var(--muted);
-        font-size: 0.82rem;
-      }
-      .toast .t-close {
-        background: none;
-        border: none;
-        color: var(--muted);
-        cursor: pointer;
-        font-size: 1rem;
-        line-height: 1;
-        padding: 0 2px;
-      }
-      @keyframes toastIn {
-        from {
-          opacity: 0;
-          transform: translateY(8px);
-        }
-      }
-
-      /* =====================================================
-         TIMELINE
-         ===================================================== */
-      .timeline {
-        position: relative;
-        padding-left: 28px;
-      }
-      .timeline::before {
-        content: "";
-        position: absolute;
-        left: 7px;
-        top: 6px;
-        bottom: 6px;
-        width: 2px;
-        background: var(--border);
-      }
-      .tl-item {
-        position: relative;
-        background: var(--card);
-        border: 1px solid var(--border);
-        border-radius: var(--radius);
-        padding: 18px 20px;
-        margin-bottom: 16px;
-        cursor: pointer;
-        transition:
-          border-color 0.15s ease,
-          transform 0.15s ease;
-        text-align: left;
-        width: 100%;
-        font-family: inherit;
-        color: inherit;
-        display: block;
-      }
-      .tl-item:hover,
-      .tl-item:focus-visible {
-        border-color: var(--accent);
-        outline: none;
-        transform: translateX(2px);
-      }
-      .tl-item::before {
-        content: "";
-        position: absolute;
-        left: -28px;
-        top: 24px;
-        width: 16px;
-        height: 16px;
-        border-radius: 50%;
-        background: var(--accent);
-        border: 3px solid var(--bg);
-      }
-      .tl-date {
-        font-size: 0.76rem;
-        color: var(--muted);
-        text-transform: uppercase;
-        letter-spacing: 0.07em;
-        font-weight: 600;
-      }
-      .tl-title {
-        font-size: 1.05rem;
-        font-weight: 700;
-        margin: 4px 0 2px;
-      }
-      .tl-sub {
-        font-size: 0.85rem;
-        color: var(--muted);
-      }
-      .tl-foot {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 12px;
-        flex-wrap: wrap;
-        margin-top: 12px;
-        padding-top: 12px;
-        border-top: 1px solid var(--border-soft);
-      }
-      .tl-hash {
-        font-family: ui-monospace, Menlo, Consolas, monospace;
-        font-size: 0.76rem;
-        color: var(--muted);
-      }
-
-      .empty {
-        text-align: center;
-        padding: 46px 20px;
-        border: 1px dashed var(--border);
-        border-radius: var(--radius);
-        color: var(--muted);
-      }
-      .empty .big {
-        font-size: 1.8rem;
-        margin-bottom: 8px;
-      }
-      .empty p {
-        margin: 0 auto;
-        max-width: 42ch;
-        font-size: 0.88rem;
-      }
-
-      .skeleton {
-        height: 84px;
-        border-radius: var(--radius);
-        background: linear-gradient(
-          90deg,
-          var(--card) 0%,
-          #1e222a 50%,
-          var(--card) 100%
-        );
-        background-size: 200% 100%;
-        animation: shimmer 1.3s linear infinite;
-        margin-bottom: 14px;
-      }
-      @keyframes shimmer {
-        to {
-          background-position: -200% 0;
-        }
-      }
-
-      /* =====================================================
-         MODAL
-         ===================================================== */
-      .modal-backdrop {
-        position: fixed;
-        inset: 0;
-        background: rgba(6, 7, 9, 0.72);
-        backdrop-filter: blur(3px);
-        z-index: 100;
-        display: none;
-        align-items: flex-start;
-        justify-content: center;
-        padding: 24px 16px;
-        overflow-y: auto;
-      }
-      .modal-backdrop.is-open {
-        display: flex;
-      }
-      .modal {
-        background: var(--card);
-        border: 1px solid var(--border);
-        border-radius: 18px;
-        width: min(560px, 100%);
-        margin: auto;
-        box-shadow: var(--shadow);
-        animation: modalIn 0.18s ease;
-      }
-      @keyframes modalIn {
-        from {
-          opacity: 0;
-          transform: translateY(10px);
-        }
-      }
-      .modal-head {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
-        gap: 14px;
-        padding: 22px 24px 0;
-      }
-      .modal-head h3 {
-        font-size: 1.15rem;
-      }
-      .modal-head p {
-        font-size: 0.83rem;
-        color: var(--muted);
-        margin: 4px 0 0;
-      }
-      .modal-close {
-        background: transparent;
-        border: 1px solid var(--border);
-        color: var(--muted);
-        width: 34px;
-        height: 34px;
-        border-radius: 9px;
-        cursor: pointer;
-        font-size: 1rem;
-        flex-shrink: 0;
-      }
-      .modal-close:hover {
-        color: var(--text);
-        border-color: #39404d;
-      }
-      .modal-body {
-        padding: 20px 24px 24px;
-      }
-      .modal-foot {
-        display: flex;
-        gap: 10px;
-        flex-wrap: wrap;
-        padding: 0 24px 24px;
-      }
-      .modal-foot .btn {
-        flex: 1;
-      }
-
-      .detail-row {
-        display: grid;
-        grid-template-columns: 140px 1fr;
-        gap: 12px;
-        padding: 11px 0;
-        border-bottom: 1px solid var(--border-soft);
-        font-size: 0.87rem;
-      }
-      .detail-row:last-child {
-        border-bottom: none;
-      }
-      .detail-row .lbl {
-        color: var(--muted);
-      }
-      .detail-row .val {
-        word-break: break-all;
-      }
-      .mono {
-        font-family: ui-monospace, Menlo, Consolas, monospace;
-        font-size: 0.82rem;
-      }
-
-      /* =====================================================
-         VERIFY
-         ===================================================== */
-      .verify-wrap {
-        display: grid;
-        grid-template-columns: 0.9fr 1.1fr;
-        gap: 20px;
-        align-items: start;
-      }
-      .verify-result {
-        display: none;
-      }
-      .verify-result.is-visible {
-        display: block;
-      }
-      .verify-badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        font-weight: 700;
-        font-size: 0.9rem;
-        padding: 8px 16px;
-        border-radius: 999px;
-        margin-bottom: 16px;
-      }
-      .badge-ok {
-        background: rgba(53, 207, 141, 0.13);
-        color: var(--success);
-        border: 1px solid rgba(53, 207, 141, 0.4);
-      }
-      .badge-no {
-        background: rgba(255, 95, 95, 0.13);
-        color: var(--error);
-        border: 1px solid rgba(255, 95, 95, 0.4);
-      }
-
-      /* =====================================================
-         ABOUT + FOOTER
-         ===================================================== */
-      .about-grid {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 18px;
-      }
-      .about-card h3 {
-        font-size: 1rem;
-        margin-bottom: 8px;
-      }
-      .about-card p {
-        font-size: 0.87rem;
-        color: var(--muted);
-        margin: 0;
-      }
-      .about-num {
-        width: 34px;
-        height: 34px;
-        border-radius: 10px;
-        background: rgba(255, 90, 54, 0.13);
-        color: var(--accent);
-        display: grid;
-        place-items: center;
-        font-weight: 700;
-        font-size: 0.9rem;
-        margin-bottom: 12px;
-      }
-
-      footer.site {
-        border-top: 1px solid var(--border-soft);
-        background: var(--bg-soft);
-        padding: 44px 0 calc(32px + env(safe-area-inset-bottom, 0px));
-      }
-      .foot-grid {
-        display: flex;
-        justify-content: space-between;
-        gap: 28px;
-        flex-wrap: wrap;
-      }
-      .foot-note {
-        font-size: 0.83rem;
-        color: var(--muted);
-        max-width: 44ch;
-        margin: 10px 0 0;
-      }
-      .foot-links {
-        display: flex;
-        gap: 28px;
-        flex-wrap: wrap;
-      }
-      .foot-col h4 {
-        font-size: 0.74rem;
-        text-transform: uppercase;
-        letter-spacing: 0.1em;
-        color: var(--muted);
-        margin: 0 0 10px;
-      }
-      .foot-col a {
-        display: block;
-        font-size: 0.86rem;
-        color: var(--text);
-        text-decoration: none;
-        margin-bottom: 7px;
-      }
-      .foot-col a:hover {
-        color: var(--accent);
-      }
-      .foot-bottom {
-        margin-top: 32px;
-        padding-top: 20px;
-        border-top: 1px solid var(--border-soft);
-        font-size: 0.78rem;
-        color: var(--muted);
-        display: flex;
-        justify-content: space-between;
-        gap: 12px;
-        flex-wrap: wrap;
-      }
-      .built-on {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        font-weight: 600;
-        color: var(--text);
-        text-decoration: none;
-      }
-      .built-dot {
-        width: 9px;
-        height: 9px;
-        border-radius: 50%;
-        background: var(--accent);
-      }
-
-      .sr-only {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        padding: 0;
-        margin: -1px;
-        overflow: hidden;
-        clip: rect(0, 0, 0, 0);
-        white-space: nowrap;
-        border: 0;
-      }
-
-      /* =====================================================
-         RESPONSIVE
-         ===================================================== */
-      @media (max-width: 900px) {
-        .hero-grid,
-        .moto-grid,
-        .verify-wrap {
-          grid-template-columns: 1fr;
-        }
-        .about-grid {
-          grid-template-columns: 1fr;
-        }
-        .hero {
-          padding: 56px 0 48px;
-        }
-        .section {
-          padding: 56px 0;
-        }
-      }
-      @media (max-width: 760px) {
-        .nav-toggle {
-          display: block;
-        }
-        .nav-links {
-          position: absolute;
-          top: 100%;
-          left: 0;
-          right: 0;
-          flex-direction: column;
-          align-items: stretch;
-          gap: 0;
-          background: var(--bg-soft);
-          border-bottom: 1px solid var(--border);
-          padding: 8px 20px 16px;
-          display: none;
-        }
-        .nav-links.is-open {
-          display: flex;
-        }
-        .nav-links a {
-          padding: 12px 8px;
-          font-size: 0.95rem;
-          border-bottom: 1px solid var(--border-soft);
-          border-radius: 0;
-        }
-        .wallet-pill {
-          font-size: 0.72rem;
-          padding: 5px 6px 5px 10px;
-        }
-        .wallet-bal {
-          display: none;
-        }
-        #navConnectBtn {
-          padding: 8px 12px;
-          font-size: 0.8rem;
-        }
-      }
-      @media (max-width: 520px) {
-        .field-row,
-        .stat-grid {
-          grid-template-columns: 1fr;
-        }
-        .detail-row {
-          grid-template-columns: 1fr;
-          gap: 2px;
-        }
-        .modal-foot {
-          flex-direction: column;
-        }
-        .timeline {
-          padding-left: 22px;
-        }
-        .tl-item::before {
-          left: -22px;
-        }
-        .toast-stack {
-          left: 16px;
-          right: 16px;
-          width: auto;
-        }
-      }
-
-      @media (prefers-reduced-motion: reduce) {
-        * {
-          animation-duration: 0.01ms !important;
-          transition-duration: 0.01ms !important;
-        }
-        html {
-          scroll-behavior: auto;
-        }
-      }
-    </style>
-  </head>
-
-  <body>
-    <!-- ============================================================
-         NAVBAR
-         ============================================================ -->
-    <header class="nav">
-      <div class="container nav-inner">
-        <a href="#top" class="brand">
-          <span class="brand-mark" aria-hidden="true">🛵</span>
-          MotoLog
-        </a>
-
-        <nav aria-label="Navigasi utama">
-          <ul class="nav-links" id="navLinks">
-            <li><a href="#dashboard">Dashboard</a></li>
-            <li><a href="#history">History</a></li>
-            <li><a href="#verify">Verify</a></li>
-            <li><a href="#about">About</a></li>
-          </ul>
-        </nav>
-
-        <div class="nav-actions">
-          <div class="wallet-pill" id="walletPill">
-            <span class="wallet-dot" aria-hidden="true"></span>
-            <span class="wallet-addr" id="pillAddress">—</span>
-            <span class="wallet-bal" id="pillBalance">—</span>
-            <button
-              class="btn btn-ghost btn-sm"
-              id="disconnectBtn"
-              type="button"
-            >
-              Disconnect
-            </button>
-          </div>
-          <button class="btn btn-sm" id="navConnectBtn" type="button">
-            Connect Wallet
-          </button>
-          <button
-            class="nav-toggle"
-            id="navToggle"
-            type="button"
-            aria-label="Buka menu navigasi"
-            aria-expanded="false"
-            aria-controls="navLinks"
-          >
-            ☰
-          </button>
-        </div>
-      </div>
-    </header>
-
-    <!-- Banner jaringan salah -->
-    <div class="net-banner" id="netBanner" role="alert">
-      <div class="net-banner-inner">
-        <strong>Wrong Network</strong>
-        <span id="netBannerMsg"
-          >Wallet kamu tidak berada di BOT Chain Testnet.</span
-        >
-        <button class="btn btn-sm" id="switchNetworkBtn" type="button">
-          Switch to BOT Chain Testnet
-        </button>
-      </div>
+  <!-- REGISTER ITEM -->
+  <div class="card">
+    <h2>1. Daftarkan Item Baru</h2>
+    <p class="hint">Dipanggil oleh pemilik barang. Item ID di-generate otomatis dan unik — tidak memakai nomor rangka/mesin asli agar data sensitif tidak tersebar publik.</p>
+    <label for="itemNameInput">Nama Motor</label>
+    <input id="itemNameInput" placeholder="Contoh: Honda Vario 2020 - Pink" />
+    <div class="actions register-actions">
+      <button id="registerBtn">Register Item</button>
+      <span id="generatedId" class="generated-id" aria-live="polite"></span>
     </div>
+    <div id="registerLog" class="log"></div>
+  </div>
 
-    <main id="top">
-      <!-- ============================================================
-           HERO
-           ============================================================ -->
-      <section class="hero">
-        <div class="container hero-grid">
-          <div>
-            <p class="eyebrow">Built on BOT Chain</p>
-            <h1>
-              Know Your Motorcycle's History.
-              <span>Trust Every Record.</span>
-            </h1>
-            <p class="sub">
-              A blockchain-verified maintenance history for motorcycles. Setiap
-              catatan servis ditulis langsung ke smart contract, jadi tidak bisa
-              diubah diam-diam maupun dipalsukan.
-            </p>
-            <div class="hero-cta">
-              <button class="btn" id="heroConnectBtn" type="button">
-                Connect Wallet
-              </button>
-              <a class="btn btn-ghost" href="#verify">Verify a Motorcycle</a>
-            </div>
-
-            <div class="hero-meta">
-              <div>
-                <span class="k" id="heroNetwork">BOT Chain Testnet</span>
-                <span class="v">Network</span>
-              </div>
-              <div>
-                <span class="k" id="heroChainId">Chain ID 968</span>
-                <span class="v">Chain</span>
-              </div>
-              <div>
-                <span class="k" id="heroRecords">—</span>
-                <span class="v">Records on-chain</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Panel status wallet -->
-          <div class="wallet-panel">
-            <h3>Wallet Status</h3>
-            <p class="hint">
-              Semua transaksi ditandatangani di MetaMask. MotoLog tidak pernah
-              meminta password, private key, maupun seed phrase.
-            </p>
-
-            <div class="wallet-row">
-              <span class="lbl">Status</span>
-              <span class="status-chip chip-off" id="panelStatusChip"
-                >Not connected</span
-              >
-            </div>
-            <div class="wallet-row">
-              <span class="lbl">Address</span>
-              <span class="val" id="panelAddress">—</span>
-            </div>
-            <div class="wallet-row">
-              <span class="lbl">Balance</span>
-              <span class="val" id="panelBalance">—</span>
-            </div>
-            <div class="wallet-row">
-              <span class="lbl">Network</span>
-              <span class="val" id="panelNetwork">—</span>
-            </div>
-            <div class="wallet-row">
-              <span class="lbl">Contract</span>
-              <span class="val mono" id="panelContract">—</span>
-            </div>
-
-            <div
-              class="inline-status"
-              id="walletStatusBox"
-              role="status"
-              aria-live="polite"
-            >
-              <span class="ico" aria-hidden="true"></span>
-              <span class="body"></span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- ============================================================
-           DASHBOARD
-           ============================================================ -->
-      <section class="section" id="dashboard">
-        <div class="container">
-          <div class="section-head">
-            <p class="eyebrow">Dashboard</p>
-            <h2>Motorcycle Profile</h2>
-            <p>
-              Masukkan Motor ID yang terdaftar di smart contract, atau daftarkan
-              motor baru kalau kamu belum punya ID.
-            </p>
-          </div>
-
-          <div class="moto-grid">
-            <!-- Kartu profil motor -->
-            <div class="card">
-              <div class="moto-head">
-                <div>
-                  <h3 id="motoName">Belum ada motor dimuat</h3>
-                  <p class="plate" id="motoPlate">
-                    Muat motor untuk melihat detail
-                  </p>
-                </div>
-                <span class="status-chip chip-off" id="motoVerifyChip"
-                  >Unverified</span
-                >
-              </div>
-
-              <div class="spec-list">
-                <div class="spec-row">
-                  <span class="lbl">Motor ID</span>
-                  <span class="val" id="motoId">—</span>
-                </div>
-                <div class="spec-row">
-                  <span class="lbl">Owner Wallet</span>
-                  <span class="val mono" id="motoOwner">—</span>
-                </div>
-                <div class="spec-row">
-                  <span class="lbl">Plate</span>
-                  <span class="val mask" id="motoPlateMasked">—</span>
-                </div>
-                <div class="spec-row">
-                  <span class="lbl">VIN</span>
-                  <span class="val mask" id="motoVin">—</span>
-                </div>
-              </div>
-
-              <div class="field" style="margin-top: 18px">
-                <label for="motoIdInput">Motor ID</label>
-                <input
-                  id="motoIdInput"
-                  type="text"
-                  placeholder="Contoh: A3F9K2"
-                />
-                <p class="help">
-                  ID ini dihasilkan smart contract saat motor pertama kali
-                  didaftarkan.
-                </p>
-              </div>
-              <div style="display: flex; gap: 10px; flex-wrap: wrap">
-                <button class="btn btn-ghost" id="loadMotorBtn" type="button">
-                  Load Motorcycle
-                </button>
-                <button class="btn btn-ghost" id="openRegisterBtn" type="button">
-                  + Register New
-                </button>
-              </div>
-
-              <div
-                class="inline-status"
-                id="motoStatusBox"
-                role="status"
-                aria-live="polite"
-              >
-                <span class="ico" aria-hidden="true"></span>
-                <span class="body"></span>
-              </div>
-            </div>
-
-            <!-- Statistik + CTA -->
-            <div class="card">
-              <div class="stat-grid">
-                <div class="stat">
-                  <div class="num" id="statRecords">—</div>
-                  <div class="cap">Total Records</div>
-                </div>
-                <div class="stat">
-                  <div class="num" id="statMileage">—</div>
-                  <div class="cap">Current Mileage</div>
-                </div>
-                <div class="stat">
-                  <div class="num" id="statLastDate">—</div>
-                  <div class="cap">Last Service</div>
-                </div>
-                <div class="stat">
-                  <div class="num" id="statVerified">—</div>
-                  <div class="cap">Verification</div>
-                </div>
-              </div>
-
-              <div style="margin-top: 20px">
-                <button
-                  class="btn btn-block"
-                  id="openAddServiceBtn"
-                  type="button"
-                >
-                  + Add Service Record
-                </button>
-                <p
-                  class="help"
-                  style="
-                    font-size: 0.78rem;
-                    color: var(--muted);
-                    margin-top: 10px;
-                    text-align: center;
-                  "
-                >
-                  Butuh wallet terhubung ke BOT Chain Testnet dan sedikit BOT
-                  untuk gas.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- ============================================================
-           HISTORY
-           ============================================================ -->
-      <section class="section" id="history">
-        <div class="container">
-          <div class="section-head">
-            <p class="eyebrow">Service History</p>
-            <h2>On-Chain Maintenance Timeline</h2>
-            <p>
-              Setiap entri dibaca langsung dari smart contract. Klik salah satu
-              record untuk melihat detail dan transaction hash-nya.
-            </p>
-          </div>
-
-          <div
-            class="inline-status"
-            id="historyStatusBox"
-            role="status"
-            aria-live="polite"
-          >
-            <span class="ico" aria-hidden="true"></span>
-            <span class="body"></span>
-          </div>
-
-          <div id="historyContainer" style="margin-top: 18px">
-            <div class="empty">
-              <div class="big" aria-hidden="true">🗓️</div>
-              <p>
-                Belum ada motor yang dimuat. Masukkan Motor ID di bagian
-                Dashboard lalu klik <strong>Load Motorcycle</strong>.
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- ============================================================
-           VERIFY
-           ============================================================ -->
-      <section class="section" id="verify">
-        <div class="container">
-          <div class="section-head">
-            <p class="eyebrow">Verify</p>
-            <h2>Verify Motorcycle History</h2>
-            <p>
-              Calon pembeli bisa memeriksa riwayat servis sebuah motor tanpa
-              perlu connect wallet — data dibaca langsung dari RPC BOT Chain.
-            </p>
-          </div>
-
-          <div class="verify-wrap">
-            <div class="card">
-              <div class="field">
-                <label for="verifyIdInput">Motor ID / Identifier</label>
-                <input
-                  id="verifyIdInput"
-                  type="text"
-                  placeholder="Contoh: A3F9K2"
-                />
-                <p class="help">Tidak perlu MetaMask untuk langkah ini.</p>
-              </div>
-              <button class="btn btn-block" id="verifyBtn" type="button">
-                Verify History
-              </button>
-
-              <div
-                class="inline-status"
-                id="verifyStatusBox"
-                role="status"
-                aria-live="polite"
-              >
-                <span class="ico" aria-hidden="true"></span>
-                <span class="body"></span>
-              </div>
-            </div>
-
-            <div class="card verify-result" id="verifyResult">
-              <span class="verify-badge badge-ok" id="verifyBadge"
-                >✓ Verified Motorcycle</span
-              >
-              <h3 id="verifyName" style="font-size: 1.25rem">—</h3>
-              <div class="spec-list" style="margin-top: 14px">
-                <div class="spec-row">
-                  <span class="lbl">Verified service records</span>
-                  <span class="val" id="verifyCount">—</span>
-                </div>
-                <div class="spec-row">
-                  <span class="lbl">Last service</span>
-                  <span class="val" id="verifyLast">—</span>
-                </div>
-                <div class="spec-row">
-                  <span class="lbl">Total recorded mileage</span>
-                  <span class="val" id="verifyMileage">—</span>
-                </div>
-                <div class="spec-row">
-                  <span class="lbl">Owner wallet</span>
-                  <span class="val mono" id="verifyOwner">—</span>
-                </div>
-              </div>
-              <div style="display: flex; gap: 10px; margin-top: 18px; flex-wrap: wrap">
-                <button class="btn" id="verifyFullHistoryBtn" type="button">
-                  View Full History
-                </button>
-                <a
-                  class="btn btn-ghost"
-                  id="verifyExplorerLink"
-                  href="#"
-                  target="_blank"
-                  rel="noopener"
-                  >View Contract ↗</a
-                >
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- ============================================================
-           ABOUT
-           ============================================================ -->
-      <section class="section" id="about">
-        <div class="container">
-          <div class="section-head">
-            <p class="eyebrow">About</p>
-            <h2>Bagaimana MotoLog Bekerja</h2>
-            <p>
-              Tiga langkah sederhana, semuanya berjalan di atas smart contract
-              BOT Chain.
-            </p>
-          </div>
-
-          <div class="about-grid">
-            <div class="card about-card">
-              <div class="about-num">1</div>
-              <h3>Register</h3>
-              <p>
-                Daftarkan motor sekali saja. Smart contract mengembalikan Motor
-                ID unik yang terikat ke wallet pemilik.
-              </p>
-            </div>
-            <div class="card about-card">
-              <div class="about-num">2</div>
-              <h3>Record</h3>
-              <p>
-                Setiap servis dicatat sebagai transaksi on-chain lengkap dengan
-                kilometer, bengkel, dan tanggal servis.
-              </p>
-            </div>
-            <div class="card about-card">
-              <div class="about-num">3</div>
-              <h3>Verify</h3>
-              <p>
-                Siapa pun bisa membaca riwayat itu dari blockchain dan
-                mencocokkannya di block explorer BOT Chain.
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-    </main>
-
-    <!-- ============================================================
-         FOOTER — wajib menampilkan branding BOT Chain
-         ============================================================ -->
-    <footer class="site">
-      <div class="container">
-        <div class="foot-grid">
-          <div>
-            <a class="built-on" href="https://botchain.ai" target="_blank" rel="noopener">
-              <span class="built-dot" aria-hidden="true"></span>
-              Built on BOT Chain
-            </a>
-            <p class="foot-note">
-              MotoLog adalah proyek Build Week Hackathon Vol. 2. Riwayat servis
-              disimpan di smart contract BOT Chain dan dapat diverifikasi
-              siapa pun lewat block explorer.
-            </p>
-          </div>
-
-          <div class="foot-links">
-            <div class="foot-col">
-              <h4>BOT Chain</h4>
-              <a href="https://botchain.ai" target="_blank" rel="noopener"
-                >botchain.ai ↗</a
-              >
-              <a href="https://scan.botchain.ai" target="_blank" rel="noopener"
-                >Mainnet Explorer ↗</a
-              >
-              <a href="https://scan.bohr.life/" target="_blank" rel="noopener"
-                >Testnet Explorer ↗</a
-              >
-            </div>
-            <div class="foot-col">
-              <h4>Resources</h4>
-              <a
-                href="https://faucet.botchain.ai/basic"
-                target="_blank"
-                rel="noopener"
-                >Testnet Faucet ↗</a
-              >
-              <a
-                href="https://dev-docs.botchain.ai/docs/intro"
-                target="_blank"
-                rel="noopener"
-                >Developer Docs ↗</a
-              >
-              <a id="footContractLink" href="#" target="_blank" rel="noopener"
-                >MotoLog Contract ↗</a
-              >
-            </div>
-          </div>
-        </div>
-
-        <div class="foot-bottom">
-          <span>© 2026 MotoLog · Build Week Hackathon Vol. 2</span>
-          <span
-            >MotoLog tidak pernah meminta private key atau seed phrase.</span
-          >
-        </div>
-      </div>
-    </footer>
-
-    <!-- ============================================================
-         MODAL: Register Motorcycle
-         ============================================================ -->
-    <div class="modal-backdrop" id="registerModal" role="dialog" aria-modal="true" aria-labelledby="registerTitle">
-      <div class="modal">
-        <div class="modal-head">
-          <div>
-            <h3 id="registerTitle">Register Motorcycle</h3>
-            <p>Sekali saja per motor. Transaksi ditandatangani di MetaMask.</p>
-          </div>
-          <button class="modal-close" data-close-modal="registerModal" type="button" aria-label="Tutup">✕</button>
-        </div>
-        <div class="modal-body">
-          <div class="field">
-            <label for="regNameInput">Nama / Model Motor</label>
-            <input id="regNameInput" placeholder="Contoh: Honda Vario 160 (2024)" maxlength="80" />
-            <p class="help">
-              Jangan tulis nomor polisi atau VIN lengkap di sini — data on-chain
-              bersifat publik dan permanen.
-            </p>
-          </div>
-          <div
-            class="inline-status"
-            id="registerStatusBox"
-            role="status"
-            aria-live="polite"
-          >
-            <span class="ico" aria-hidden="true"></span>
-            <span class="body"></span>
-          </div>
-        </div>
-        <div class="modal-foot">
-          <button class="btn btn-ghost" data-close-modal="registerModal" type="button">Batal</button>
-          <button class="btn" id="submitRegisterBtn" type="button">Register on Blockchain</button>
-          <span id="registerResultId" class="mono" style="font-size:0.85rem;color:var(--success);align-self:center;"></span>
-        </div>
-      </div>
+  <!-- ADD SERVICE RECORD -->
+  <div class="card">
+    <h2>2. Tambah Record Servis</h2>
+    <p class="hint">Dipanggil oleh bengkel/teknisi yang menangani servis. Cukup tahu Item ID-nya, tidak harus jadi owner.</p>
+    <label for="serviceItemId">Item ID</label>
+    <input id="serviceItemId" placeholder="Contoh: A3F9K2" />
+    <label for="serviceType">Jenis Servis</label>
+    <input id="serviceType" placeholder="Contoh: Ganti oli" />
+    <label for="technician">Nama Teknisi / Bengkel</label>
+    <input id="technician" placeholder="Contoh: Bengkel Jaya" />
+    <label for="notes">Catatan (opsional)</label>
+    <input id="notes" placeholder="Contoh: Servis rutin 5000km" />
+    <div class="actions">
+      <button id="addServiceBtn">Tambah Record</button>
     </div>
+    <div id="serviceLog" class="log"></div>
+  </div>
 
-    <!-- ============================================================
-         MODAL: Add Service Record
-         ============================================================ -->
-    <div class="modal-backdrop" id="serviceModal" role="dialog" aria-modal="true" aria-labelledby="serviceTitle">
-      <div class="modal">
-        <div class="modal-head">
-          <div>
-            <h3 id="serviceTitle">Add Service Record</h3>
-            <p>Data akan ditulis permanen ke smart contract BOT Chain.</p>
-          </div>
-          <button class="modal-close" data-close-modal="serviceModal" type="button" aria-label="Tutup">✕</button>
-        </div>
-        <div class="modal-body">
-          <div class="field">
-            <label for="svcMotoId">Motor ID</label>
-            <input id="svcMotoId" type="text" placeholder="Contoh: A3F9K2" />
-          </div>
-          <div class="field">
-            <label for="svcType">Service Type</label>
-            <select id="svcType">
-              <option value="Oil Change">Oil Change</option>
-              <option value="Brake Service">Brake Service</option>
-              <option value="Engine Service">Engine Service</option>
-              <option value="CVT Maintenance">CVT Maintenance</option>
-              <option value="Tire Replacement">Tire Replacement</option>
-              <option value="General Maintenance">General Maintenance</option>
-              <option value="Other">Other</option>
-            </select>
-          </div>
-          <div class="field-row">
-            <div class="field">
-              <label for="svcMileage">Mileage (KM)</label>
-              <input id="svcMileage" type="number" min="0" inputmode="numeric" placeholder="12450" />
-            </div>
-            <div class="field">
-              <label for="svcDate">Service Date</label>
-              <input id="svcDate" type="date" />
-            </div>
-          </div>
-          <div class="field">
-            <label for="svcWorkshop">Workshop</label>
-            <input id="svcWorkshop" placeholder="Contoh: ABC Motor Service" maxlength="60" />
-          </div>
-          <div class="field">
-            <label for="svcDesc">Description</label>
-            <textarea id="svcDesc" placeholder="Contoh: Ganti oli mesin dan filter oli" maxlength="200"></textarea>
-          </div>
-
-          <div
-            class="inline-status"
-            id="serviceStatusBox"
-            role="status"
-            aria-live="polite"
-          >
-            <span class="ico" aria-hidden="true"></span>
-            <span class="body"></span>
-          </div>
-        </div>
-        <div class="modal-foot">
-          <button class="btn btn-ghost" data-close-modal="serviceModal" type="button">Batal</button>
-          <button class="btn" id="submitServiceBtn" type="button">Record on Blockchain</button>
-        </div>
-      </div>
+  <!-- LOOKUP -->
+  <div class="card">
+    <h2>3. Cek Riwayat Servis</h2>
+    <p class="hint">Siapa saja bisa cek riwayat ini — tidak perlu jadi owner atau bengkel. Cocok untuk calon pembeli barang second.</p>
+    <label for="lookupItemId">Item ID</label>
+    <input id="lookupItemId" placeholder="Contoh: A3F9K2" />
+    <div class="actions">
+      <button id="lookupBtn">Cek Riwayat</button>
     </div>
+    <div id="lookupLog" class="log"></div>
 
-    <!-- ============================================================
-         MODAL: Service Record Detail
-         ============================================================ -->
-    <div class="modal-backdrop" id="detailModal" role="dialog" aria-modal="true" aria-labelledby="detailTitle">
-      <div class="modal">
-        <div class="modal-head">
-          <div>
-            <h3 id="detailTitle">Service Record Detail</h3>
-            <p>Dibaca langsung dari smart contract.</p>
-          </div>
-          <button class="modal-close" data-close-modal="detailModal" type="button" aria-label="Tutup">✕</button>
-        </div>
-        <div class="modal-body" id="detailBody"></div>
-        <div class="modal-foot">
-          <button class="btn btn-ghost" data-close-modal="detailModal" type="button">Tutup</button>
-          <a class="btn" id="detailExplorerLink" href="#" target="_blank" rel="noopener">View on BOT Explorer ↗</a>
-        </div>
-      </div>
-    </div>
+    <div id="itemInfoBox"></div>
+    <div id="historyBox"></div>
+  </div>
 
-    <!-- Tempat toast muncul (pengganti alert) -->
-    <div class="toast-stack" id="toastStack" aria-live="polite" aria-atomic="false"></div>
+  <footer>
+    Powered by <strong>BOT Chain</strong> — <a href="https://botchain.ai" target="_blank">botchain.ai</a> ·
+    <a href="#" id="explorerLink" target="_blank">BOT Chain Explorer</a>
+  </footer>
 
-    <script>
-      /* ==============================================================
-         BAGIAN 1 — KONFIGURASI
-         Cuma bagian INI yang perlu kamu ubah setelah contract di-deploy.
-         ============================================================== */
-      const CONFIG = {
-        // GANTI dengan alamat contract hasil deploy di Remix.
-        CONTRACT_ADDRESS: "0x0B3d453D71257e8f049B62189Fd9813Bdc0cbAB2",
+</div>
 
-        // Jaringan target. Untuk hackathon: testnet dulu, lalu ganti ke mainnet.
-        NETWORK: {
-          chainId: 968, // desimal
-          chainIdHex: "0x3c8", // 968 dalam heksadesimal
-          chainName: "BOT Chain Testnet",
-          rpcUrls: ["https://rpc.bohr.life"],
-          blockExplorerUrls: ["https://scan.bohr.life"],
-          nativeCurrency: { name: "BOT", symbol: "BOT", decimals: 18 },
-        },
+<script>
+  // ==========================================================
+  // KONFIGURASI — ISI BAGIAN INI SEBELUM DIPAKAI
+  // ==========================================================
+  const CONTRACT_ADDRESS = "0x0B3d453D71257e8f049B62189Fd9813Bdc0cbAB2";
+  const EXPLORER_BASE_URL = "https://scan.bohr.life/address/"; // format: scan.bohr.life/address/{contract_address}
+  document.getElementById("explorerLink").href = EXPLORER_BASE_URL + CONTRACT_ADDRESS;
 
-        // Untuk mainnet nanti, tinggal tukar object NETWORK di atas dengan:
-        // chainId: 677, chainIdHex: "0x2a5", chainName: "BOT Chain Mainnet",
-        // rpcUrls: ["https://rpc.botchain.ai"],
-        // blockExplorerUrls: ["https://scan.botchain.ai"]
-      };
+  const CONTRACT_ABI = [
+    {
+      "anonymous": false,
+      "inputs": [
+        { "indexed": true, "internalType": "string", "name": "itemIdHash", "type": "string" },
+        { "indexed": false, "internalType": "string", "name": "itemId", "type": "string" },
+        { "indexed": true, "internalType": "address", "name": "owner", "type": "address" },
+        { "indexed": false, "internalType": "string", "name": "itemName", "type": "string" }
+      ],
+      "name": "ItemRegistered", "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        { "indexed": true, "internalType": "string", "name": "itemIdHash", "type": "string" },
+        { "indexed": false, "internalType": "string", "name": "itemId", "type": "string" },
+        { "indexed": false, "internalType": "string", "name": "serviceType", "type": "string" },
+        { "indexed": false, "internalType": "string", "name": "technician", "type": "string" },
+        { "indexed": false, "internalType": "uint256", "name": "timestamp", "type": "uint256" }
+      ],
+      "name": "ServiceAdded", "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        { "indexed": true, "internalType": "string", "name": "itemIdHash", "type": "string" },
+        { "indexed": false, "internalType": "string", "name": "itemId", "type": "string" },
+        { "indexed": true, "internalType": "address", "name": "oldOwner", "type": "address" },
+        { "indexed": true, "internalType": "address", "name": "newOwner", "type": "address" }
+      ],
+      "name": "ItemTransferred", "type": "event"
+    },
+    {
+      "inputs": [
+        { "internalType": "string", "name": "itemId", "type": "string" },
+        { "internalType": "string", "name": "itemName", "type": "string" }
+      ],
+      "name": "registerItem", "outputs": [],
+      "stateMutability": "nonpayable", "type": "function"
+    },
+    {
+      "inputs": [
+        { "internalType": "string", "name": "itemId", "type": "string" },
+        { "internalType": "string", "name": "serviceType", "type": "string" },
+        { "internalType": "string", "name": "technician", "type": "string" },
+        { "internalType": "string", "name": "notes", "type": "string" }
+      ],
+      "name": "addServiceRecord", "outputs": [],
+      "stateMutability": "nonpayable", "type": "function"
+    },
+    {
+      "inputs": [{ "internalType": "string", "name": "itemId", "type": "string" }],
+      "name": "getServiceHistory",
+      "outputs": [{
+        "components": [
+          { "internalType": "string", "name": "serviceType", "type": "string" },
+          { "internalType": "string", "name": "technician", "type": "string" },
+          { "internalType": "string", "name": "notes", "type": "string" },
+          { "internalType": "uint256", "name": "timestamp", "type": "uint256" }
+        ],
+        "internalType": "struct ServiTrace.ServiceRecord[]", "name": "", "type": "tuple[]"
+      }],
+      "stateMutability": "view", "type": "function"
+    },
+    {
+      "inputs": [{ "internalType": "string", "name": "itemId", "type": "string" }],
+      "name": "getItem",
+      "outputs": [{
+        "components": [
+          { "internalType": "string", "name": "itemName", "type": "string" },
+          { "internalType": "address", "name": "owner", "type": "address" },
+          { "internalType": "bool", "name": "exists", "type": "bool" }
+        ],
+        "internalType": "struct ServiTrace.Item", "name": "", "type": "tuple"
+      }],
+      "stateMutability": "view", "type": "function"
+    }
+  ];
+  // ==========================================================
 
-      // GANTI dengan ABI hasil compile di Remix (tab Solidity Compiler > ABI).
-      const CONTRACT_ABI = [
-        {
-          anonymous: false,
-          inputs: [
-            { indexed: true, internalType: "string", name: "itemIdHash", type: "string" },
-            { indexed: false, internalType: "string", name: "itemId", type: "string" },
-            { indexed: true, internalType: "address", name: "owner", type: "address" },
-            { indexed: false, internalType: "string", name: "itemName", type: "string" },
-          ],
-          name: "ItemRegistered",
-          type: "event",
-        },
-        {
-          anonymous: false,
-          inputs: [
-            { indexed: true, internalType: "string", name: "itemIdHash", type: "string" },
-            { indexed: false, internalType: "string", name: "itemId", type: "string" },
-            { indexed: false, internalType: "string", name: "serviceType", type: "string" },
-            { indexed: false, internalType: "string", name: "technician", type: "string" },
-            { indexed: false, internalType: "uint256", name: "timestamp", type: "uint256" },
-          ],
-          name: "ServiceAdded",
-          type: "event",
-        },
-        {
-          anonymous: false,
-          inputs: [
-            { indexed: true, internalType: "string", name: "itemIdHash", type: "string" },
-            { indexed: false, internalType: "string", name: "itemId", type: "string" },
-            { indexed: true, internalType: "address", name: "oldOwner", type: "address" },
-            { indexed: true, internalType: "address", name: "newOwner", type: "address" },
-          ],
-          name: "ItemTransferred",
-          type: "event",
-        },
-        {
-          inputs: [
-            { internalType: "string", name: "itemId", type: "string" },
-            { internalType: "string", name: "itemName", type: "string" },
-          ],
-          name: "registerItem",
-          outputs: [],
-          stateMutability: "nonpayable",
-          type: "function",
-        },
-        {
-          inputs: [
-            { internalType: "string", name: "itemId", type: "string" },
-            { internalType: "string", name: "serviceType", type: "string" },
-            { internalType: "string", name: "technician", type: "string" },
-            { internalType: "string", name: "notes", type: "string" },
-          ],
-          name: "addServiceRecord",
-          outputs: [],
-          stateMutability: "nonpayable",
-          type: "function",
-        },
-        {
-          inputs: [{ internalType: "string", name: "itemId", type: "string" }],
-          name: "getServiceHistory",
-          outputs: [
-            {
-              components: [
-                { internalType: "string", name: "serviceType", type: "string" },
-                { internalType: "string", name: "technician", type: "string" },
-                { internalType: "string", name: "notes", type: "string" },
-                { internalType: "uint256", name: "timestamp", type: "uint256" },
-              ],
-              internalType: "struct MotoLog.ServiceRecord[]",
-              name: "",
-              type: "tuple[]",
-            },
-          ],
-          stateMutability: "view",
-          type: "function",
-        },
-        {
-          inputs: [{ internalType: "string", name: "itemId", type: "string" }],
-          name: "getItem",
-          outputs: [
-            {
-              components: [
-                { internalType: "string", name: "itemName", type: "string" },
-                { internalType: "address", name: "owner", type: "address" },
-                { internalType: "bool", name: "exists", type: "bool" },
-              ],
-              internalType: "struct MotoLog.Item",
-              name: "",
-              type: "tuple",
-            },
-          ],
-          stateMutability: "view",
-          type: "function",
-        },
-      ];
+  let provider, signer, contract, userAddress;
 
-      /* ==============================================================
-         BAGIAN 2 — STATE GLOBAL
-         ============================================================== */
-      let provider = null; // provider dari MetaMask (untuk tulis)
-      let readProvider = null; // provider RPC langsung (untuk baca tanpa wallet)
-      let signer = null;
-      let contract = null; // contract instance dengan signer (kirim transaksi)
-      let readContract = null; // contract instance read-only
-      let userAddress = null;
-      let currentChainId = null;
-      let currentMotoId = null;
-      let currentRecords = []; // cache record yang sedang ditampilkan
+  const walletStatus = document.getElementById("walletStatus");
+  const connectBtn = document.getElementById("connectBtn");
 
-      const CONTRACT_READY =
-        /^0x[a-fA-F0-9]{40}$/.test(CONFIG.CONTRACT_ADDRESS) &&
-        CONFIG.CONTRACT_ADDRESS !== "0x" + "0".repeat(40);
+  function showLog(elId, message, isError) {
+    const el = document.getElementById(elId);
+    el.textContent = message;
+    el.className = "log show " + (isError ? "err" : "ok");
+  }
 
-      const $ = (id) => document.getElementById(id);
+  async function connectWallet() {
+    if (typeof window.ethereum === "undefined") {
+      alert("MetaMask tidak terdeteksi. Silakan install MetaMask terlebih dahulu.");
+      return;
+    }
+    try {
+      provider = new ethers.providers.Web3Provider(window.ethereum);
+      await provider.send("eth_requestAccounts", []);
+      signer = provider.getSigner();
+      userAddress = await signer.getAddress();
+      contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
 
-      /* ==============================================================
-         BAGIAN 3 — HELPER TAMPILAN
-         Semua pesan lewat toast / inline status. TIDAK ADA alert().
-         ============================================================== */
+      walletStatus.textContent = "Terhubung: " + userAddress.slice(0, 6) + "..." + userAddress.slice(-4);
+      walletStatus.classList.add("connected");
+      connectBtn.textContent = "Connected";
+      connectBtn.disabled = true;
+    } catch (err) {
+      console.error(err);
+      alert("Gagal connect wallet: " + (err.message || err));
+    }
+  }
 
-      // Escape teks supaya string dari blockchain tidak bisa menyuntik HTML.
-      function escapeHtml(value) {
-        return String(value ?? "")
-          .replace(/&/g, "&amp;")
-          .replace(/</g, "&lt;")
-          .replace(/>/g, "&gt;")
-          .replace(/"/g, "&quot;")
-          .replace(/'/g, "&#39;");
-      }
+  function generateRandomId() {
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // tanpa 0/O/1/I biar tidak ambigu saat dibaca manual
+    let code = "";
+    for (let i = 0; i < 6; i++) {
+      code += chars[Math.floor(Math.random() * chars.length)];
+    }
+    return code;
+  }
 
-      function shortenAddress(addr) {
-        if (!addr || addr.length < 12) return addr || "—";
-        return addr.slice(0, 6) + "..." + addr.slice(-4);
-      }
+  async function registerItem() {
+    if (!contract) return alert("Connect wallet dulu.");
 
-      function shortenHash(hash) {
-        if (!hash || hash.length < 16) return hash || "—";
-        return hash.slice(0, 10) + "..." + hash.slice(-8);
-      }
+    const name = document.getElementById("itemNameInput").value.trim();
+    const generatedId = document.getElementById("generatedId");
 
-      function formatDate(input) {
-        const d = input instanceof Date ? input : new Date(input);
-        if (isNaN(d.getTime())) return "—";
-        return d.toLocaleDateString("id-ID", {
-          day: "2-digit",
-          month: "short",
-          year: "numeric",
-        });
-      }
+    if (!name) return alert("Isi nama motor dulu.");
 
-      function formatDateTime(d) {
-        if (isNaN(d.getTime())) return "—";
-        return d.toLocaleString("id-ID", {
-          day: "2-digit",
-          month: "long",
-          year: "numeric",
-          hour: "2-digit",
-          minute: "2-digit",
-        });
-      }
+    const MAX_RETRY = 5;
+    let itemId = "";
 
-      function formatNumber(n) {
-        const num = Number(n);
-        return isNaN(num) ? "—" : num.toLocaleString("id-ID");
-      }
+    for (let attempt = 0; attempt < MAX_RETRY; attempt++) {
+      try {
+        // ID baru dibuat otomatis saat tombol Register Item ditekan.
+        itemId = generateRandomId();
+        generatedId.textContent = "ID: " + itemId;
 
-      const TOAST_ICONS = { ok: "✓", err: "✕", warn: "!", info: "i" };
-
-      /**
-       * showNotification — pengganti alert().
-       * type: "ok" | "err" | "warn" | "info"
-       */
-      function showNotification(title, message, type = "info", duration = 5500) {
-        const stack = $("toastStack");
-        const el = document.createElement("div");
-        el.className = "toast t-" + type;
-        el.setAttribute("role", type === "err" ? "alert" : "status");
-        el.innerHTML =
-          '<span aria-hidden="true">' +
-          escapeHtml(TOAST_ICONS[type] || "i") +
-          "</span>" +
-          '<div class="t-body"><div class="t-title">' +
-          escapeHtml(title) +
-          "</div>" +
-          (message ? '<div class="t-msg">' + escapeHtml(message) + "</div>" : "") +
-          "</div>" +
-          '<button class="t-close" type="button" aria-label="Tutup notifikasi">✕</button>';
-
-        el.querySelector(".t-close").addEventListener("click", () => el.remove());
-        stack.appendChild(el);
-        if (duration > 0) setTimeout(() => el.remove(), duration);
-      }
-
-      /**
-       * setStatus — menulis pesan ke kotak status inline di dalam kartu/modal.
-       * html boleh berisi markup (sudah kita susun sendiri, bukan input user mentah).
-       */
-      function setStatus(boxId, html, type = "info", loading = false) {
-        const box = $(boxId);
-        if (!box) return;
-        box.className = "inline-status is-visible st-" + type;
-        box.querySelector(".ico").innerHTML = loading
-          ? '<span class="spinner"></span>'
-          : escapeHtml(TOAST_ICONS[type] || "i");
-        box.querySelector(".body").innerHTML = html;
-      }
-
-      function clearStatus(boxId) {
-        const box = $(boxId);
-        if (!box) return;
-        box.className = "inline-status";
-        box.querySelector(".body").innerHTML = "";
-      }
-
-      function explorerTxUrl(hash) {
-        return CONFIG.NETWORK.blockExplorerUrls[0] + "/tx/" + hash;
-      }
-      function explorerAddressUrl(addr) {
-        return CONFIG.NETWORK.blockExplorerUrls[0] + "/address/" + addr;
-      }
-
-      /** Ubah pesan error MetaMask/ethers jadi kalimat yang ramah dibaca. */
-      function readableError(err) {
-        const code = err?.code;
-        const msg = (err?.reason || err?.data?.message || err?.message || "").toString();
-
-        if (code === 4001 || code === "ACTION_REJECTED")
-          return "Transaksi dibatalkan di MetaMask.";
-        if (code === -32002)
-          return "MetaMask sedang menunggu persetujuan. Buka ekstensinya dulu.";
-        if (code === "INSUFFICIENT_FUNDS" || /insufficient funds/i.test(msg))
-          return "Saldo BOT tidak cukup untuk membayar gas. Ambil dulu di faucet.";
-        if (code === "CALL_EXCEPTION" || /call revert|revert/i.test(msg))
-          return "Smart contract menolak permintaan ini. Cek Motor ID dan kepemilikan wallet.";
-        if (code === "NETWORK_ERROR" || /network|failed to fetch/i.test(msg))
-          return "Gagal menghubungi RPC BOT Chain. Cek koneksi internet kamu.";
-        if (/unsupported|could not detect network/i.test(msg))
-          return "Jaringan tidak terdeteksi. Pastikan wallet ada di BOT Chain Testnet.";
-        return msg.slice(0, 180) || "Terjadi kesalahan yang tidak diketahui.";
-      }
-
-      /* ==============================================================
-         BAGIAN 4 — PAYLOAD RECORD
-         Contract menyimpan serviceType, technician, notes, timestamp.
-         Field tambahan (mileage, tanggal servis, deskripsi) kita bungkus
-         sebagai JSON di dalam `notes` supaya tidak perlu ubah contract.
-         Kalau nanti kamu pakai contract dengan field sendiri, cukup ubah
-         encodeNotes() dan decodeNotes() di bawah ini.
-         ============================================================== */
-      function encodeNotes({ mileage, serviceDate, description }) {
-        return JSON.stringify({
-          v: 1,
-          km: mileage ? Number(mileage) : null,
-          date: serviceDate || null,
-          desc: description || "",
-        });
-      }
-
-      function decodeNotes(raw) {
-        try {
-          const parsed = JSON.parse(raw);
-          if (parsed && typeof parsed === "object" && parsed.v === 1) {
-            return {
-              mileage: parsed.km,
-              serviceDate: parsed.date,
-              description: parsed.desc || "",
-            };
-          }
-        } catch (_) {
-          /* bukan JSON — berarti record lama, tampilkan apa adanya */
-        }
-        return { mileage: null, serviceDate: null, description: raw || "" };
-      }
-
-      /* ==============================================================
-         BAGIAN 5 — PROVIDER & WALLET
-         ============================================================== */
-
-      /** Provider read-only lewat RPC — dipakai fitur Verify tanpa MetaMask. */
-      function getReadContract() {
-        if (readContract) return readContract;
-        if (!CONTRACT_READY) return null;
-        readProvider = new ethers.providers.JsonRpcProvider(
-          CONFIG.NETWORK.rpcUrls[0],
-          { name: CONFIG.NETWORK.chainName, chainId: CONFIG.NETWORK.chainId },
+        showLog(
+          "registerLog",
+          attempt === 0
+            ? "ID dibuat otomatis. Mengirim transaksi..."
+            : `ID bentrok, membuat ID baru (${attempt + 1}/${MAX_RETRY})...`,
+          false
         );
-        readContract = new ethers.Contract(
-          CONFIG.CONTRACT_ADDRESS,
-          CONTRACT_ABI,
-          readProvider,
-        );
-        return readContract;
+
+        const tx = await contract.registerItem(itemId, name);
+
+        showLog("registerLog", "Menunggu konfirmasi blockchain...", false);
+        await tx.wait();
+
+        generatedId.textContent = "ID: " + itemId;
+        showLog("registerLog", `Berhasil! Motor terdaftar dengan ID: ${itemId}`, false);
+
+        document.getElementById("serviceItemId").value = itemId;
+        document.getElementById("lookupItemId").value = itemId;
+        return;
+      } catch (err) {
+        const msg = (err.reason || err.message || "").toString();
+
+        if (msg.includes("ItemAlreadyExists")) {
+          continue;
+        }
+
+        console.error(err);
+        generatedId.textContent = "";
+        showLog("registerLog", "Gagal: " + msg, true);
+        return;
+      }
+    }
+
+    generatedId.textContent = "";
+    showLog("registerLog", "Gagal: terlalu banyak percobaan, coba klik Register lagi.", true);
+  }
+
+  async function addServiceRecord() {
+    if (!contract) return alert("Connect wallet dulu.");
+    const itemId = document.getElementById("serviceItemId").value.trim();
+    const serviceType = document.getElementById("serviceType").value.trim();
+    const technician = document.getElementById("technician").value.trim();
+    const notes = document.getElementById("notes").value.trim();
+
+    if (!itemId || !serviceType || !technician) {
+      return alert("Isi Item ID, Jenis Servis, dan Nama Teknisi.");
+    }
+
+    try {
+      showLog("serviceLog", "Mengirim transaksi...", false);
+      const tx = await contract.addServiceRecord(itemId, serviceType, technician, notes);
+      showLog("serviceLog", "Menunggu konfirmasi blockchain...", false);
+      await tx.wait();
+      showLog("serviceLog", "Record servis berhasil ditambahkan!", false);
+    } catch (err) {
+      console.error(err);
+      showLog("serviceLog", "Gagal: " + (err.reason || err.message || err), true);
+    }
+  }
+
+  async function lookupHistory() {
+    if (!contract) return alert("Connect wallet dulu.");
+    const itemId = document.getElementById("lookupItemId").value.trim();
+    if (!itemId) return alert("Isi Item ID dulu.");
+
+    const itemInfoBox = document.getElementById("itemInfoBox");
+    const historyBox = document.getElementById("historyBox");
+    itemInfoBox.innerHTML = "";
+    historyBox.innerHTML = "";
+
+    try {
+      showLog("lookupLog", "Mengambil data...", false);
+      const item = await contract.getItem(itemId);
+      const history = await contract.getServiceHistory(itemId);
+
+      itemInfoBox.innerHTML = `
+        <div class="item-info">
+          <div><span class="label">Nama Item</span>: ${item.itemName}</div>
+          <div><span class="label">Owner</span>: ${item.owner.slice(0,6)}...${item.owner.slice(-4)}</div>
+          <div><span class="label">Item ID</span>: ${itemId}</div>
+        </div>`;
+
+      if (history.length === 0) {
+        historyBox.innerHTML = `<div class="empty-state">Belum ada riwayat servis untuk item ini.</div>`;
+      } else {
+        historyBox.innerHTML = history.map(r => {
+          const date = new Date(r.timestamp.toNumber() * 1000).toLocaleString("id-ID");
+          return `
+            <div class="record">
+              <div class="type">${r.serviceType}</div>
+              <div>Teknisi: ${r.technician}</div>
+              ${r.notes ? `<div>Catatan: ${r.notes}</div>` : ""}
+              <div class="meta">${date}</div>
+            </div>`;
+        }).join("");
       }
 
-      async function connectWallet() {
-        if (typeof window.ethereum === "undefined") {
-          setStatus(
-            "walletStatusBox",
-            'MetaMask is not detected. Please install MetaMask to continue. ' +
-              '<a href="https://metamask.io" target="_blank" rel="noopener">Download MetaMask ↗</a>',
-            "err",
-          );
-          showNotification(
-            "MetaMask tidak terdeteksi",
-            "Install ekstensi MetaMask lalu muat ulang halaman ini.",
-            "err",
-          );
-          return;
-        }
-
-        try {
-          setStatus("walletStatusBox", "Menghubungkan ke MetaMask...", "info", true);
-          setConnectingState(true);
-
-          provider = new ethers.providers.Web3Provider(window.ethereum, "any");
-          const accounts = await provider.send("eth_requestAccounts", []);
-          if (!accounts || accounts.length === 0) {
-            throw { code: 4001 };
-          }
-
-          signer = provider.getSigner();
-          userAddress = await signer.getAddress();
-
-          const net = await provider.getNetwork();
-          currentChainId = net.chainId;
-
-          if (CONTRACT_READY) {
-            contract = new ethers.Contract(
-              CONFIG.CONTRACT_ADDRESS,
-              CONTRACT_ABI,
-              signer,
-            );
-          }
-
-          await refreshBalance();
-          await checkNetwork();
-          updateUI();
-
-          showNotification(
-            "Wallet terhubung",
-            shortenAddress(userAddress),
-            "ok",
-            4000,
-          );
-        } catch (err) {
-          console.error(err);
-          setStatus("walletStatusBox", escapeHtml(readableError(err)), "err");
-          showNotification("Gagal connect wallet", readableError(err), "err");
-        } finally {
-          setConnectingState(false);
-        }
-      }
-
-      function disconnectWallet() {
-        provider = null;
-        signer = null;
-        contract = null;
-        userAddress = null;
-        currentChainId = null;
-        clearStatus("walletStatusBox");
-        $("netBanner").classList.remove("is-visible");
-        updateUI();
-        showNotification(
-          "Wallet diputus",
-          "Sesi di halaman ini dibersihkan. Cabut izin situs lewat MetaMask bila perlu.",
-          "info",
-          4500,
-        );
-      }
-
-      function setConnectingState(isConnecting) {
-        ["navConnectBtn", "heroConnectBtn"].forEach((id) => {
-          const btn = $(id);
-          btn.disabled = isConnecting;
-          btn.textContent = isConnecting ? "Connecting..." : "Connect Wallet";
-        });
-      }
-
-      async function refreshBalance() {
-        if (!provider || !userAddress) return;
-        try {
-          const raw = await provider.getBalance(userAddress);
-          const bal = Number(ethers.utils.formatEther(raw)).toFixed(4);
-          $("pillBalance").textContent = bal + " BOT";
-          $("panelBalance").textContent = bal + " BOT";
-        } catch (err) {
-          console.error(err);
-          $("pillBalance").textContent = "—";
-          $("panelBalance").textContent = "tidak bisa dibaca";
-        }
-      }
-
-      /** checkNetwork — true kalau wallet berada di chain yang benar. */
-      async function checkNetwork() {
-        if (!provider) return false;
-        const net = await provider.getNetwork();
-        currentChainId = net.chainId;
-        const ok = currentChainId === CONFIG.NETWORK.chainId;
-
-        const banner = $("netBanner");
-        banner.classList.toggle("is-visible", !ok);
-        if (!ok) {
-          $("netBannerMsg").textContent =
-            "Wallet kamu ada di chain ID " +
-            currentChainId +
-            ". MotoLog butuh " +
-            CONFIG.NETWORK.chainName +
-            " (chain ID " +
-            CONFIG.NETWORK.chainId +
-            ").";
-        }
-        updateUI();
-        return ok;
-      }
-
-      /** switchNetwork — minta MetaMask pindah jaringan, tambahkan bila belum ada. */
-      async function switchNetwork() {
-        if (typeof window.ethereum === "undefined") {
-          showNotification(
-            "MetaMask tidak terdeteksi",
-            "Install MetaMask terlebih dahulu.",
-            "err",
-          );
-          return;
-        }
-        const btn = $("switchNetworkBtn");
-        btn.disabled = true;
-        btn.textContent = "Switching...";
-        try {
-          await window.ethereum.request({
-            method: "wallet_switchEthereumChain",
-            params: [{ chainId: CONFIG.NETWORK.chainIdHex }],
-          });
-          showNotification("Jaringan diganti", CONFIG.NETWORK.chainName, "ok", 3500);
-        } catch (err) {
-          // 4902 = jaringan belum terdaftar di MetaMask, jadi kita tambahkan.
-          if (err.code === 4902 || err.code === -32603) {
-            try {
-              await window.ethereum.request({
-                method: "wallet_addEthereumChain",
-                params: [
-                  {
-                    chainId: CONFIG.NETWORK.chainIdHex,
-                    chainName: CONFIG.NETWORK.chainName,
-                    rpcUrls: CONFIG.NETWORK.rpcUrls,
-                    blockExplorerUrls: CONFIG.NETWORK.blockExplorerUrls,
-                    nativeCurrency: CONFIG.NETWORK.nativeCurrency,
-                  },
-                ],
-              });
-              showNotification(
-                "Jaringan ditambahkan",
-                CONFIG.NETWORK.chainName + " siap dipakai.",
-                "ok",
-              );
-            } catch (addErr) {
-              console.error(addErr);
-              showNotification("Gagal menambah jaringan", readableError(addErr), "err");
-            }
-          } else {
-            console.error(err);
-            showNotification("Gagal pindah jaringan", readableError(err), "err");
-          }
-        } finally {
-          btn.disabled = false;
-          btn.textContent = "Switch to BOT Chain Testnet";
-          if (provider) {
-            await checkNetwork();
-            await refreshBalance();
-          }
-        }
-      }
-
-      /** Guard sebelum kirim transaksi. Mengembalikan pesan error atau null. */
-      function writeGuard() {
-        if (!CONTRACT_READY)
-          return "CONTRACT_ADDRESS belum diisi. Buka bagian CONFIG di index.html dan tempel alamat contract kamu.";
-        if (!contract) return "Hubungkan wallet terlebih dahulu.";
-        if (currentChainId !== CONFIG.NETWORK.chainId)
-          return "Pindah ke " + CONFIG.NETWORK.chainName + " sebelum mengirim transaksi.";
-        return null;
-      }
-
-      /* ==============================================================
-         BAGIAN 6 — UPDATE UI
-         ============================================================== */
-      function updateUI() {
-        const connected = Boolean(userAddress);
-        const rightNet = currentChainId === CONFIG.NETWORK.chainId;
-
-        // Navbar
-        $("walletPill").classList.toggle("is-visible", connected);
-        $("navConnectBtn").style.display = connected ? "none" : "inline-flex";
-        $("heroConnectBtn").style.display = connected ? "none" : "inline-flex";
-        $("pillAddress").textContent = shortenAddress(userAddress);
-        $("panelAddress").textContent = connected ? shortenAddress(userAddress) : "—";
-
-        // Chip status
-        const chip = $("panelStatusChip");
-        if (!connected) {
-          chip.className = "status-chip chip-off";
-          chip.textContent = "Not connected";
-          $("panelNetwork").textContent = "—";
-          $("panelBalance").textContent = "—";
-        } else if (!rightNet) {
-          chip.className = "status-chip chip-warn";
-          chip.textContent = "Wrong network";
-          $("panelNetwork").textContent = "Chain ID " + currentChainId;
-        } else {
-          chip.className = "status-chip chip-on";
-          chip.textContent = "Connected ✓";
-          $("panelNetwork").textContent = CONFIG.NETWORK.chainName;
-        }
-
-        // Info contract
-        if (CONTRACT_READY) {
-          $("panelContract").textContent = shortenAddress(CONFIG.CONTRACT_ADDRESS);
-          const url = explorerAddressUrl(CONFIG.CONTRACT_ADDRESS);
-          $("footContractLink").href = url;
-          $("verifyExplorerLink").href = url;
-        } else {
-          $("panelContract").textContent = "belum dikonfigurasi";
-          $("footContractLink").href = CONFIG.NETWORK.blockExplorerUrls[0];
-          $("verifyExplorerLink").href = CONFIG.NETWORK.blockExplorerUrls[0];
-        }
-
-        // Tombol tulis
-        const canWrite = connected && rightNet && CONTRACT_READY;
-        $("openAddServiceBtn").disabled = !canWrite;
-        $("openRegisterBtn").disabled = !canWrite;
-
-        // Hero meta
-        $("heroNetwork").textContent = CONFIG.NETWORK.chainName;
-        $("heroChainId").textContent = "Chain ID " + CONFIG.NETWORK.chainId;
-        $("heroRecords").textContent = currentRecords.length
-          ? formatNumber(currentRecords.length)
-          : "—";
-      }
-
-      /* ==============================================================
-         BAGIAN 7 — REGISTER MOTOR
-         ============================================================== */
-      function generateRandomItemId() {
-        // 4-8 karakter, huruf kapital + angka, tanpa 0/O/1/I biar tidak ambigu saat dibaca manual dari stiker.
-        const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-        const length = 4 + Math.floor(Math.random() * 5); // random 4..8
-        let code = "";
-        for (let i = 0; i < length; i++) {
-          code += chars[Math.floor(Math.random() * chars.length)];
-        }
-        return code;
-      }
-
-      async function registerMotorcycle() {
-        const guard = writeGuard();
-        if (guard) {
-          setStatus("registerStatusBox", escapeHtml(guard), "warn");
-          return;
-        }
-
-        const name = $("regNameInput").value.trim();
-        if (!name) {
-          setStatus("registerStatusBox", "Nama motor wajib diisi.", "warn");
-          $("regNameInput").focus();
-          return;
-        }
-
-        const btn = $("submitRegisterBtn");
-        btn.disabled = true;
-        const MAX_RETRY = 5;
-        let newId = null;
-        try {
-          for (let attempt = 0; attempt < MAX_RETRY; attempt++) {
-            const candidateId = generateRandomItemId();
-            try {
-              setStatus(
-                "registerStatusBox",
-                attempt === 0
-                  ? "Menunggu konfirmasi di MetaMask..."
-                  : "ID bentrok (sangat jarang), mencoba ID baru...",
-                "info",
-                true,
-              );
-              const tx = await contract.registerItem(candidateId, name);
-
-              setStatus(
-                "registerStatusBox",
-                "Transaksi terkirim. Menunggu blok terkonfirmasi..." +
-                  '<div class="tx-line">' + escapeHtml(shortenHash(tx.hash)) + "</div>",
-                "info",
-                true,
-              );
-
-              const receipt = await tx.wait();
-              newId = candidateId;
-
-              setStatus(
-                "registerStatusBox",
-                "Motor terdaftar di blockchain." +
-                  '<div class="tx-line">' +
-                  escapeHtml(shortenHash(receipt.transactionHash)) +
-                  ' · <a href="' +
-                  explorerTxUrl(receipt.transactionHash) +
-                  '" target="_blank" rel="noopener">View on BOT Explorer ↗</a></div>',
-                "ok",
-              );
-              break;
-            } catch (err) {
-              const msg = (err.reason || err.message || "").toString();
-              if (msg.includes("ItemAlreadyExists") && attempt < MAX_RETRY - 1) {
-                continue; // ID kebetulan sudah dipakai — coba lagi dengan ID baru
-              }
-              throw err;
-            }
-          }
-
-          if (newId) {
-            $("registerResultId").textContent = "Motor ID: " + newId;
-            $("motoIdInput").value = newId;
-            $("svcMotoId").value = newId;
-            $("verifyIdInput").value = newId;
-            await loadMotor(newId);
-          }
-          showNotification("Motor terdaftar", newId ? "Motor ID: " + newId : "", "ok");
-          await refreshBalance();
-        } catch (err) {
-          console.error(err);
-          setStatus("registerStatusBox", escapeHtml(readableError(err)), "err");
-          showNotification("Registrasi gagal", readableError(err), "err");
-        } finally {
-          btn.disabled = false;
-        }
-      }
-
-      /* ==============================================================
-         BAGIAN 8 — LOAD MOTOR + HISTORY
-         ============================================================== */
-      async function loadMotor(idOverride) {
-        const id = String(idOverride ?? $("motoIdInput").value).trim();
-        if (!id) {
-          setStatus("motoStatusBox", "Masukkan Motor ID yang valid terlebih dahulu.", "warn");
-          return;
-        }
-        const c = contract || getReadContract();
-        if (!c) {
-          setStatus(
-            "motoStatusBox",
-            "CONTRACT_ADDRESS belum dikonfigurasi di file ini.",
-            "warn",
-          );
-          return;
-        }
-
-        const btn = $("loadMotorBtn");
-        btn.disabled = true;
-        try {
-          setStatus("motoStatusBox", "Membaca data dari blockchain...", "info", true);
-          const item = await c.getItem(id);
-
-          if (!item.exists) {
-            setStatus(
-              "motoStatusBox",
-              "Motor ID " + escapeHtml(id) + " belum terdaftar di smart contract ini.",
-              "err",
-            );
-            resetMotoCard();
-            renderHistory([], null);
-            return;
-          }
-
-          currentMotoId = id;
-          $("motoName").textContent = item.itemName;
-          $("motoPlate").textContent = "Motor ID #" + id;
-          $("motoId").textContent = id;
-          $("motoOwner").textContent = shortenAddress(item.owner);
-          // Data sensitif ditampilkan tersensor — plate & VIN memang tidak
-          // disimpan on-chain supaya tidak bocor ke publik.
-          $("motoPlateMasked").textContent = "B **** XXX";
-          $("motoVin").textContent = "****" + id.padStart(4, "0");
-          $("motoVerifyChip").className = "status-chip chip-on";
-          $("motoVerifyChip").textContent = "Blockchain verified";
-
-          $("svcMotoId").value = id;
-          setStatus("motoStatusBox", "Data motor berhasil dimuat.", "ok");
-          await loadServiceHistory(id);
-        } catch (err) {
-          console.error(err);
-          setStatus("motoStatusBox", escapeHtml(readableError(err)), "err");
-          showNotification("Gagal memuat motor", readableError(err), "err");
-        } finally {
-          btn.disabled = false;
-        }
-      }
-
-      function resetMotoCard() {
-        currentMotoId = null;
-        $("motoName").textContent = "Belum ada motor dimuat";
-        $("motoPlate").textContent = "Muat motor untuk melihat detail";
-        ["motoId", "motoOwner", "motoPlateMasked", "motoVin"].forEach((id) => {
-          $(id).textContent = "—";
-        });
-        $("motoVerifyChip").className = "status-chip chip-off";
-        $("motoVerifyChip").textContent = "Unverified";
-        ["statRecords", "statMileage", "statLastDate", "statVerified"].forEach((id) => {
-          $(id).textContent = "—";
-        });
-      }
-
-      /**
-       * loadServiceHistory — baca semua record + ambil transaction hash aslinya
-       * dari event ServiceAdded. Hash TIDAK pernah dibuat-buat: kalau event
-       * tidak bisa dibaca, kolom transaction dibiarkan kosong.
-       */
-      async function loadServiceHistory(id) {
-        const c = contract || getReadContract();
-        if (!c) return;
-
-        const box = $("historyContainer");
-        box.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div>';
-        setStatus("historyStatusBox", "Memuat riwayat servis dari BOT Chain...", "info", true);
-
-        try {
-          const raw = await c.getServiceHistory(id);
-
-          // Ambil transaction hash sebenarnya dari log event.
-          let txHashes = [];
-          try {
-            const reader = getReadContract() || c;
-            const filter = reader.filters.ServiceAdded(id);
-            const logs = await reader.queryFilter(filter, 0, "latest");
-            txHashes = logs.map((l) => l.transactionHash);
-          } catch (evErr) {
-            console.warn("Tidak bisa membaca event log:", evErr);
-          }
-
-          currentRecords = raw.map((r, i) => {
-            const extra = decodeNotes(r.notes);
-            return {
-              index: i,
-              serviceType: r.serviceType,
-              workshop: r.technician,
-              description: extra.description,
-              mileage: extra.mileage,
-              serviceDate: extra.serviceDate,
-              blockTime: new Date(r.timestamp.toNumber() * 1000),
-              txHash: txHashes[i] || null,
-            };
-          });
-
-          renderHistory(currentRecords, id);
-          updateStats(currentRecords);
-          clearStatus("historyStatusBox");
-          updateUI();
-        } catch (err) {
-          console.error(err);
-          box.innerHTML = "";
-          setStatus("historyStatusBox", escapeHtml(readableError(err)), "err");
-        }
-      }
-
-      function renderHistory(records, id) {
-        const box = $("historyContainer");
-
-        if (!records || records.length === 0) {
-          box.innerHTML =
-            '<div class="empty"><div class="big" aria-hidden="true">📋</div>' +
-            "<p>" +
-            (id
-              ? "Motor #" + escapeHtml(String(id)) +
-                " belum punya record servis. Tambahkan yang pertama lewat tombol Add Service Record."
-              : "Belum ada motor yang dimuat. Masukkan Motor ID di bagian Dashboard.") +
-            "</p></div>";
-          return;
-        }
-
-        // Terbaru di atas.
-        const sorted = [...records].sort((a, b) => b.blockTime - a.blockTime);
-
-        const html = sorted
-          .map((r) => {
-            const shownDate = r.serviceDate ? formatDate(r.serviceDate) : formatDate(r.blockTime);
-            const km = r.mileage != null ? formatNumber(r.mileage) + " KM" : "Mileage tidak dicatat";
-            return (
-              '<button class="tl-item" type="button" data-record-index="' + r.index + '">' +
-              '<div class="tl-date">' + escapeHtml(shownDate) + "</div>" +
-              '<div class="tl-title">' + escapeHtml(r.serviceType) + "</div>" +
-              '<div class="tl-sub">' + escapeHtml(km) + " · " + escapeHtml(r.workshop || "—") + "</div>" +
-              '<div class="tl-foot">' +
-              '<span class="status-chip chip-on">✓ Verified on BOT Chain</span>' +
-              '<span class="tl-hash">' +
-              (r.txHash ? escapeHtml(shortenHash(r.txHash)) : "tx hash tidak terbaca") +
-              "</span></div></button>"
-            );
-          })
-          .join("");
-
-        box.innerHTML = '<div class="timeline">' + html + "</div>";
-
-        box.querySelectorAll("[data-record-index]").forEach((el) => {
-          el.addEventListener("click", () =>
-            openRecordDetail(Number(el.dataset.recordIndex)),
-          );
-        });
-      }
-
-      function updateStats(records) {
-        $("statRecords").textContent = formatNumber(records.length);
-
-        const kms = records.map((r) => r.mileage).filter((v) => typeof v === "number" && !isNaN(v));
-        $("statMileage").textContent = kms.length
-          ? formatNumber(Math.max(...kms)) + " KM"
-          : "—";
-
-        if (records.length) {
-          const latest = records.reduce((a, b) => (a.blockTime > b.blockTime ? a : b));
-          $("statLastDate").textContent = latest.serviceDate
-            ? formatDate(latest.serviceDate)
-            : formatDate(latest.blockTime);
-          $("statVerified").textContent = "✓ On-chain";
-        } else {
-          $("statLastDate").textContent = "—";
-          $("statVerified").textContent = "—";
-        }
-      }
-
-      /* ==============================================================
-         BAGIAN 9 — DETAIL RECORD
-         ============================================================== */
-      function openRecordDetail(index) {
-        const r = currentRecords.find((x) => x.index === index);
-        if (!r) return;
-
-        const rows = [
-          ["Service Type", escapeHtml(r.serviceType)],
-          ["Description", escapeHtml(r.description || "—")],
-          ["Mileage", r.mileage != null ? escapeHtml(formatNumber(r.mileage)) + " KM" : "—"],
-          ["Service Date", r.serviceDate ? escapeHtml(formatDate(r.serviceDate)) : "—"],
-          ["Workshop", escapeHtml(r.workshop || "—")],
-          ["Recorded On-Chain", escapeHtml(formatDateTime(r.blockTime))],
-          ["Blockchain Status", '<span class="status-chip chip-on">✓ Verified</span>'],
-          [
-            "Transaction Hash",
-            r.txHash
-              ? '<span class="mono">' + escapeHtml(r.txHash) + "</span>"
-              : "<em>tidak terbaca dari log event</em>",
-          ],
-          ["Contract Address", '<span class="mono">' + escapeHtml(CONFIG.CONTRACT_ADDRESS) + "</span>"],
-        ];
-
-        $("detailBody").innerHTML = rows
-          .map(
-            ([label, value]) =>
-              '<div class="detail-row"><span class="lbl">' +
-              escapeHtml(label) +
-              '</span><span class="val">' +
-              value +
-              "</span></div>",
-          )
-          .join("");
-
-        // Link explorer memakai hash asli; kalau tidak ada, arahkan ke contract.
-        $("detailExplorerLink").href = r.txHash
-          ? explorerTxUrl(r.txHash)
-          : explorerAddressUrl(CONFIG.CONTRACT_ADDRESS);
-        $("detailExplorerLink").textContent = r.txHash
-          ? "View Transaction on BOT Explorer ↗"
-          : "View Contract on BOT Explorer ↗";
-
-        openModal("detailModal");
-      }
-
-      /* ==============================================================
-         BAGIAN 10 — ADD SERVICE RECORD
-         ============================================================== */
-      async function addServiceRecord() {
-        const guard = writeGuard();
-        if (guard) {
-          setStatus("serviceStatusBox", escapeHtml(guard), "warn");
-          return;
-        }
-
-        const motoId = $("svcMotoId").value.trim();
-        const serviceType = $("svcType").value;
-        const mileage = $("svcMileage").value.trim();
-        const serviceDate = $("svcDate").value;
-        const workshop = $("svcWorkshop").value.trim();
-        const description = $("svcDesc").value.trim();
-
-        // Validasi form — semuanya inline, tanpa alert.
-        if (!motoId) {
-          setStatus("serviceStatusBox", "Motor ID wajib diisi.", "warn");
-          $("svcMotoId").focus();
-          return;
-        }
-        if (!workshop) {
-          setStatus("serviceStatusBox", "Nama bengkel wajib diisi.", "warn");
-          $("svcWorkshop").focus();
-          return;
-        }
-        if (!mileage) {
-          setStatus("serviceStatusBox", "Kilometer saat servis wajib diisi.", "warn");
-          $("svcMileage").focus();
-          return;
-        }
-
-        const btn = $("submitServiceBtn");
-        btn.disabled = true;
-        try {
-          setStatus(
-            "serviceStatusBox",
-            "Recording service... konfirmasi transaksi di MetaMask.",
-            "info",
-            true,
-          );
-
-          const tx = await contract.addServiceRecord(
-            motoId,
-            serviceType,
-            workshop,
-            encodeNotes({ mileage, serviceDate, description }),
-          );
-
-          setStatus(
-            "serviceStatusBox",
-            "Transaksi terkirim ke BOT Chain. Menunggu konfirmasi blok..." +
-              '<div class="tx-line">' + escapeHtml(shortenHash(tx.hash)) + "</div>",
-            "info",
-            true,
-          );
-
-          const receipt = await tx.wait();
-          const hash = receipt.transactionHash;
-
-          setStatus(
-            "serviceStatusBox",
-            "Transaction confirmed ✓ Service record successfully recorded on BOT Chain." +
-              '<div class="tx-line">' +
-              escapeHtml(hash) +
-              '<br><a href="' +
-              explorerTxUrl(hash) +
-              '" target="_blank" rel="noopener">View on BOT Explorer ↗</a></div>',
-            "ok",
-          );
-          showNotification(
-            "Service record recorded",
-            "Tx " + shortenHash(hash),
-            "ok",
-            7000,
-          );
-
-          // Bersihkan form, refresh timeline dari blockchain (bukan data palsu).
-          $("svcMileage").value = "";
-          $("svcDesc").value = "";
-          $("motoIdInput").value = motoId;
-          await loadMotor(motoId);
-          await refreshBalance();
-        } catch (err) {
-          console.error(err);
-          setStatus("serviceStatusBox", escapeHtml(readableError(err)), "err");
-          showNotification("Transaksi gagal", readableError(err), "err");
-        } finally {
-          btn.disabled = false;
-        }
-      }
-
-      /* ==============================================================
-         BAGIAN 11 — VERIFY (tanpa wallet)
-         ============================================================== */
-      async function verifyMotor() {
-        const id = $("verifyIdInput").value.trim();
-        const result = $("verifyResult");
-        result.classList.remove("is-visible");
-
-        if (!id) {
-          setStatus("verifyStatusBox", "Masukkan Motor ID yang mau diperiksa.", "warn");
-          return;
-        }
-
-        const c = getReadContract() || contract;
-        if (!c) {
-          setStatus(
-            "verifyStatusBox",
-            "CONTRACT_ADDRESS belum dikonfigurasi, jadi verifikasi belum bisa dijalankan.",
-            "warn",
-          );
-          return;
-        }
-
-        const btn = $("verifyBtn");
-        btn.disabled = true;
-        try {
-          setStatus("verifyStatusBox", "Memeriksa data di smart contract...", "info", true);
-
-          const item = await c.getItem(id);
-          if (!item.exists) {
-            // Tidak pernah menampilkan "verified" kalau contract bilang tidak ada.
-            $("verifyBadge").className = "verify-badge badge-no";
-            $("verifyBadge").textContent = "✕ Not Found On-Chain";
-            $("verifyName").textContent = "Motor ID #" + id;
-            $("verifyCount").textContent = "0";
-            $("verifyLast").textContent = "—";
-            $("verifyMileage").textContent = "—";
-            $("verifyOwner").textContent = "—";
-            result.classList.add("is-visible");
-            setStatus(
-              "verifyStatusBox",
-              "Motor ID ini tidak ditemukan di smart contract. Jangan anggap riwayatnya terverifikasi.",
-              "err",
-            );
-            return;
-          }
-
-          const raw = await c.getServiceHistory(id);
-          const records = raw.map((r) => {
-            const extra = decodeNotes(r.notes);
-            return {
-              mileage: extra.mileage,
-              serviceDate: extra.serviceDate,
-              blockTime: new Date(r.timestamp.toNumber() * 1000),
-            };
-          });
-
-          $("verifyBadge").className = "verify-badge badge-ok";
-          $("verifyBadge").textContent = "✓ Verified Motorcycle";
-          $("verifyName").textContent = item.itemName;
-          $("verifyCount").textContent =
-            formatNumber(records.length) + " verified record" + (records.length === 1 ? "" : "s");
-          $("verifyOwner").textContent = shortenAddress(item.owner);
-
-          if (records.length) {
-            const latest = records.reduce((a, b) => (a.blockTime > b.blockTime ? a : b));
-            $("verifyLast").textContent = latest.serviceDate
-              ? formatDate(latest.serviceDate)
-              : formatDate(latest.blockTime);
-            const kms = records.map((r) => r.mileage).filter((v) => typeof v === "number");
-            $("verifyMileage").textContent = kms.length
-              ? formatNumber(Math.max(...kms)) + " KM"
-              : "tidak dicatat";
-          } else {
-            $("verifyLast").textContent = "belum ada servis";
-            $("verifyMileage").textContent = "—";
-          }
-
-          result.classList.add("is-visible");
-          setStatus(
-            "verifyStatusBox",
-            "Data diverifikasi langsung dari smart contract di " +
-              escapeHtml(CONFIG.NETWORK.chainName) + ".",
-            "ok",
-          );
-        } catch (err) {
-          console.error(err);
-          setStatus("verifyStatusBox", escapeHtml(readableError(err)), "err");
-        } finally {
-          btn.disabled = false;
-        }
-      }
-
-      /* ==============================================================
-         BAGIAN 12 — MODAL & NAVIGASI
-         ============================================================== */
-      let lastFocused = null;
-
-      function openModal(id) {
-        lastFocused = document.activeElement;
-        $(id).classList.add("is-open");
-        document.body.style.overflow = "hidden";
-        const focusable = $(id).querySelector("input, select, textarea, button");
-        if (focusable) focusable.focus();
-      }
-
-      function closeModal(id) {
-        $(id).classList.remove("is-open");
-        document.body.style.overflow = "";
-        if (lastFocused) lastFocused.focus();
-      }
-
-      function closeAllModals() {
-        document.querySelectorAll(".modal-backdrop.is-open").forEach((m) => {
-          m.classList.remove("is-open");
-        });
-        document.body.style.overflow = "";
-      }
-
-      /* ==============================================================
-         BAGIAN 13 — INISIALISASI
-         ============================================================== */
-      document.addEventListener("DOMContentLoaded", () => {
-        // Tanggal servis default: hari ini.
-        $("svcDate").value = new Date().toISOString().slice(0, 10);
-
-        // Tombol connect / disconnect
-        $("navConnectBtn").addEventListener("click", connectWallet);
-        $("heroConnectBtn").addEventListener("click", connectWallet);
-        $("disconnectBtn").addEventListener("click", disconnectWallet);
-        $("switchNetworkBtn").addEventListener("click", switchNetwork);
-
-        // Dashboard
-        $("loadMotorBtn").addEventListener("click", () => loadMotor());
-        $("openRegisterBtn").addEventListener("click", () => {
-          clearStatus("registerStatusBox");
-          openModal("registerModal");
-        });
-        $("openAddServiceBtn").addEventListener("click", () => {
-          clearStatus("serviceStatusBox");
-          if (currentMotoId) $("svcMotoId").value = currentMotoId;
-          openModal("serviceModal");
-        });
-        $("motoIdInput").addEventListener("keydown", (e) => {
-          if (e.key === "Enter") loadMotor();
-        });
-
-        // Modal submit
-        $("submitRegisterBtn").addEventListener("click", registerMotorcycle);
-        $("submitServiceBtn").addEventListener("click", addServiceRecord);
-
-        // Verify
-        $("verifyBtn").addEventListener("click", verifyMotor);
-        $("verifyIdInput").addEventListener("keydown", (e) => {
-          if (e.key === "Enter") verifyMotor();
-        });
-        $("verifyFullHistoryBtn").addEventListener("click", async () => {
-          const id = $("verifyIdInput").value.trim();
-          if (!id) return;
-          $("motoIdInput").value = id;
-          await loadMotor(id);
-          $("history").scrollIntoView({ behavior: "smooth" });
-        });
-
-        // Tutup modal
-        document.querySelectorAll("[data-close-modal]").forEach((btn) => {
-          btn.addEventListener("click", () => closeModal(btn.dataset.closeModal));
-        });
-        document.querySelectorAll(".modal-backdrop").forEach((bd) => {
-          bd.addEventListener("click", (e) => {
-            if (e.target === bd) closeModal(bd.id);
-          });
-        });
-        document.addEventListener("keydown", (e) => {
-          if (e.key === "Escape") closeAllModals();
-        });
-
-        // Navbar mobile
-        const toggle = $("navToggle");
-        const links = $("navLinks");
-        toggle.addEventListener("click", () => {
-          const open = links.classList.toggle("is-open");
-          toggle.setAttribute("aria-expanded", String(open));
-        });
-        links.querySelectorAll("a").forEach((a) => {
-          a.addEventListener("click", () => {
-            links.classList.remove("is-open");
-            toggle.setAttribute("aria-expanded", "false");
-          });
-        });
-
-        // Peringatan kalau config belum diisi — tampil sebagai toast, bukan alert.
-        if (!CONTRACT_READY) {
-          setStatus(
-            "walletStatusBox",
-            "CONTRACT_ADDRESS masih placeholder. Isi di bagian <strong>CONFIG</strong> pada file ini setelah deploy contract di Remix.",
-            "warn",
-          );
-          showNotification(
-            "Contract belum dikonfigurasi",
-            "Isi CONTRACT_ADDRESS dan CONTRACT_ABI di bagian CONFIG index.html.",
-            "warn",
-            9000,
-          );
-        }
-
-        // Event MetaMask: ganti akun / ganti jaringan.
-        if (typeof window.ethereum !== "undefined") {
-          window.ethereum.on("accountsChanged", async (accounts) => {
-            if (!accounts || accounts.length === 0) {
-              disconnectWallet();
-            } else {
-              userAddress = accounts[0];
-              signer = provider ? provider.getSigner() : null;
-              if (signer && CONTRACT_READY) {
-                contract = new ethers.Contract(
-                  CONFIG.CONTRACT_ADDRESS,
-                  CONTRACT_ABI,
-                  signer,
-                );
-              }
-              await refreshBalance();
-              updateUI();
-              showNotification("Akun diganti", shortenAddress(userAddress), "info", 4000);
-            }
-          });
-
-          window.ethereum.on("chainChanged", async () => {
-            // Buat provider baru agar chainId terbaca ulang dengan benar.
-            provider = new ethers.providers.Web3Provider(window.ethereum, "any");
-            signer = provider.getSigner();
-            if (CONTRACT_READY) {
-              contract = new ethers.Contract(
-                CONFIG.CONTRACT_ADDRESS,
-                CONTRACT_ABI,
-                signer,
-              );
-            }
-            const ok = await checkNetwork();
-            await refreshBalance();
-            showNotification(
-              ok ? "Jaringan benar" : "Jaringan salah",
-              ok ? CONFIG.NETWORK.chainName : "Pindah ke " + CONFIG.NETWORK.chainName,
-              ok ? "ok" : "warn",
-              4500,
-            );
-          });
-        }
-
-        updateUI();
-      });
-    </script>
-  </body>
+      showLog("lookupLog", "Data berhasil dimuat.", false);
+    } catch (err) {
+      console.error(err);
+      showLog("lookupLog", "Gagal: item mungkin belum terdaftar. (" + (err.reason || err.message || err) + ")", true);
+    }
+  }
+
+  connectBtn.addEventListener("click", connectWallet);
+  document.getElementById("registerBtn").addEventListener("click", registerItem);
+  document.getElementById("addServiceBtn").addEventListener("click", addServiceRecord);
+  document.getElementById("lookupBtn").addEventListener("click", lookupHistory);
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
+</body>
 </html>
