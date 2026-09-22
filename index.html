@@ -60,16 +60,20 @@
     font-size: 0.9rem;
   }
   input:focus { outline: 1px solid var(--accent); }
-  .actions { margin-top: 16px; display: flex; gap: 10px; flex-wrap: wrap; }
-  .register-actions { align-items: center; }
-  .generated-id {
-    display: inline-flex; align-items: center; min-height: 38px;
-    padding: 8px 12px; border: 1px solid var(--border);
-    border-radius: 8px; background: #0c0e12; color: var(--success);
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    font-weight: 700; letter-spacing: 0.08em;
+  .actions { margin-top: 16px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+
+  /* Tampilan ID Unik di Samping Tombol */
+  .generated-id-badge {
+    display: none;
+    background: #0c0e12;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 700;
+    letter-spacing: 1px;
   }
-  .generated-id:empty { display: none; }
 
   #log {
     font-size: 0.8rem; padding: 10px 12px; border-radius: 8px;
@@ -84,7 +88,7 @@
     border-radius: 10px; padding: 14px; margin-top: 14px; font-size: 0.85rem;
   }
   .item-info div { margin-bottom: 4px; }
-  .item-info .label { color: var(--muted); display: inline-block; width: 90px; }
+  .item-info .label { color: var(--muted); display: inline-block; width: 100px; }
 
   .record {
     background: #0c0e12; border: 1px solid var(--border);
@@ -116,13 +120,15 @@
 
   <!-- REGISTER ITEM -->
   <div class="card">
-    <h2>1. Daftarkan Item Baru</h2>
-    <p class="hint">Dipanggil oleh pemilik barang. Item ID di-generate otomatis dan unik — tidak memakai nomor rangka/mesin asli agar data sensitif tidak tersebar publik.</p>
-    <label for="itemNameInput">Nama Motor</label>
+    <h2>1. Daftarkan Item / Motor Baru</h2>
+    <p class="hint">Masukkan nama item. Klik 'Register Item' untuk mendaftarkan ke blockchain. ID unik akan dibuat otomatis di samping tombol.</p>
+    
+    <label for="itemNameInput">Nama Item / Motor</label>
     <input id="itemNameInput" placeholder="Contoh: Honda Vario 2020 - Pink" />
-    <div class="actions register-actions">
+    
+    <div class="actions">
       <button id="registerBtn">Register Item</button>
-      <span id="generatedId" class="generated-id" aria-live="polite"></span>
+      <div id="generatedIdBadge" class="generated-id-badge"></div>
     </div>
     <div id="registerLog" class="log"></div>
   </div>
@@ -130,15 +136,19 @@
   <!-- ADD SERVICE RECORD -->
   <div class="card">
     <h2>2. Tambah Record Servis</h2>
-    <p class="hint">Dipanggil oleh bengkel/teknisi yang menangani servis. Cukup tahu Item ID-nya, tidak harus jadi owner.</p>
+    <p class="hint">Dipanggil oleh bengkel/teknisi yang menangani servis. Cukup masukkan Item ID, jenis servis, KM, nama teknisi, dan nama pemilik.</p>
     <label for="serviceItemId">Item ID</label>
     <input id="serviceItemId" placeholder="Contoh: A3F9K2" />
     <label for="serviceType">Jenis Servis</label>
     <input id="serviceType" placeholder="Contoh: Ganti oli" />
+    <label for="mileage">Kilometer Saat Ini (KM)</label>
+    <input id="mileage" type="number" placeholder="Contoh: 12500" />
     <label for="technician">Nama Teknisi / Bengkel</label>
     <input id="technician" placeholder="Contoh: Bengkel Jaya" />
+    <label for="serviceOwnerName">Nama Pemilik</label>
+    <input id="serviceOwnerName" placeholder="Contoh: Budi Santoso" />
     <label for="notes">Catatan (opsional)</label>
-    <input id="notes" placeholder="Contoh: Servis rutin 5000km" />
+    <input id="notes" placeholder="Contoh: Servis rutin 12.000 km, oli Shell 10W-40" />
     <div class="actions">
       <button id="addServiceBtn">Tambah Record</button>
     </div>
@@ -171,8 +181,8 @@
   // ==========================================================
   // KONFIGURASI — ISI BAGIAN INI SEBELUM DIPAKAI
   // ==========================================================
-  const CONTRACT_ADDRESS = "0x0B3d453D71257e8f049B62189Fd9813Bdc0cbAB2";
-  const EXPLORER_BASE_URL = "https://scan.bohr.life/address/"; // format: scan.bohr.life/address/{contract_address}
+  const CONTRACT_ADDRESS = "0xef494f5a488cddf12a22f8716bb150a14a16f780";
+  const EXPLORER_BASE_URL = "https://scan.bohr.life/address/";
   document.getElementById("explorerLink").href = EXPLORER_BASE_URL + CONTRACT_ADDRESS;
 
   const CONTRACT_ABI = [
@@ -181,7 +191,6 @@
       "inputs": [
         { "indexed": true, "internalType": "string", "name": "itemIdHash", "type": "string" },
         { "indexed": false, "internalType": "string", "name": "itemId", "type": "string" },
-        { "indexed": true, "internalType": "address", "name": "owner", "type": "address" },
         { "indexed": false, "internalType": "string", "name": "itemName", "type": "string" }
       ],
       "name": "ItemRegistered", "type": "event"
@@ -193,19 +202,11 @@
         { "indexed": false, "internalType": "string", "name": "itemId", "type": "string" },
         { "indexed": false, "internalType": "string", "name": "serviceType", "type": "string" },
         { "indexed": false, "internalType": "string", "name": "technician", "type": "string" },
+        { "indexed": false, "internalType": "string", "name": "ownerName", "type": "string" },
+        { "indexed": false, "internalType": "uint256", "name": "mileage", "type": "uint256" },
         { "indexed": false, "internalType": "uint256", "name": "timestamp", "type": "uint256" }
       ],
       "name": "ServiceAdded", "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        { "indexed": true, "internalType": "string", "name": "itemIdHash", "type": "string" },
-        { "indexed": false, "internalType": "string", "name": "itemId", "type": "string" },
-        { "indexed": true, "internalType": "address", "name": "oldOwner", "type": "address" },
-        { "indexed": true, "internalType": "address", "name": "newOwner", "type": "address" }
-      ],
-      "name": "ItemTransferred", "type": "event"
     },
     {
       "inputs": [
@@ -220,7 +221,9 @@
         { "internalType": "string", "name": "itemId", "type": "string" },
         { "internalType": "string", "name": "serviceType", "type": "string" },
         { "internalType": "string", "name": "technician", "type": "string" },
-        { "internalType": "string", "name": "notes", "type": "string" }
+        { "internalType": "string", "name": "ownerName", "type": "string" },
+        { "internalType": "string", "name": "notes", "type": "string" },
+        { "internalType": "uint256", "name": "mileage", "type": "uint256" }
       ],
       "name": "addServiceRecord", "outputs": [],
       "stateMutability": "nonpayable", "type": "function"
@@ -232,7 +235,9 @@
         "components": [
           { "internalType": "string", "name": "serviceType", "type": "string" },
           { "internalType": "string", "name": "technician", "type": "string" },
+          { "internalType": "string", "name": "ownerName", "type": "string" },
           { "internalType": "string", "name": "notes", "type": "string" },
+          { "internalType": "uint256", "name": "mileage", "type": "uint256" },
           { "internalType": "uint256", "name": "timestamp", "type": "uint256" }
         ],
         "internalType": "struct ServiTrace.ServiceRecord[]", "name": "", "type": "tuple[]"
@@ -245,7 +250,6 @@
       "outputs": [{
         "components": [
           { "internalType": "string", "name": "itemName", "type": "string" },
-          { "internalType": "address", "name": "owner", "type": "address" },
           { "internalType": "bool", "name": "exists", "type": "bool" }
         ],
         "internalType": "struct ServiTrace.Item", "name": "", "type": "tuple"
@@ -288,8 +292,9 @@
     }
   }
 
+  // Fungsi pembuat 6 karakter unik acak (rentang 4-8)
   function generateRandomId() {
-    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // tanpa 0/O/1/I biar tidak ambigu saat dibaca manual
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
     let code = "";
     for (let i = 0; i < 6; i++) {
       code += chars[Math.floor(Math.random() * chars.length)];
@@ -299,55 +304,44 @@
 
   async function registerItem() {
     if (!contract) return alert("Connect wallet dulu.");
-
     const name = document.getElementById("itemNameInput").value.trim();
-    const generatedId = document.getElementById("generatedId");
+    
+    if (!name) return alert("Isi nama item / motor terlebih dahulu.");
 
-    if (!name) return alert("Isi nama motor dulu.");
+    const badge = document.getElementById("generatedIdBadge");
+    badge.style.display = "none";
 
+    let itemId = generateRandomId();
     const MAX_RETRY = 5;
-    let itemId = "";
 
     for (let attempt = 0; attempt < MAX_RETRY; attempt++) {
       try {
-        // ID baru dibuat otomatis saat tombol Register Item ditekan.
-        itemId = generateRandomId();
-        generatedId.textContent = "ID: " + itemId;
-
-        showLog(
-          "registerLog",
-          attempt === 0
-            ? "ID dibuat otomatis. Mengirim transaksi..."
-            : `ID bentrok, membuat ID baru (${attempt + 1}/${MAX_RETRY})...`,
-          false
-        );
-
+        showLog("registerLog", attempt === 0 ? "Mengirim transaksi..." : `ID bentrok, mencoba ID baru (percobaan ${attempt + 1})...`, false);
         const tx = await contract.registerItem(itemId, name);
-
         showLog("registerLog", "Menunggu konfirmasi blockchain...", false);
         await tx.wait();
 
-        generatedId.textContent = "ID: " + itemId;
-        showLog("registerLog", `Berhasil! Motor terdaftar dengan ID: ${itemId}`, false);
+        // Tampilkan ID unik di samping tombol register
+        badge.textContent = "ID: " + itemId;
+        badge.style.display = "inline-block";
 
+        showLog("registerLog", `Berhasil! Item terdaftar dengan ID: ${itemId}`, false);
+        
+        // Auto-fill ke input section lain
         document.getElementById("serviceItemId").value = itemId;
         document.getElementById("lookupItemId").value = itemId;
         return;
       } catch (err) {
         const msg = (err.reason || err.message || "").toString();
-
         if (msg.includes("ItemAlreadyExists")) {
+          itemId = generateRandomId();
           continue;
         }
-
         console.error(err);
-        generatedId.textContent = "";
         showLog("registerLog", "Gagal: " + msg, true);
         return;
       }
     }
-
-    generatedId.textContent = "";
     showLog("registerLog", "Gagal: terlalu banyak percobaan, coba klik Register lagi.", true);
   }
 
@@ -355,16 +349,18 @@
     if (!contract) return alert("Connect wallet dulu.");
     const itemId = document.getElementById("serviceItemId").value.trim();
     const serviceType = document.getElementById("serviceType").value.trim();
+    const mileage = document.getElementById("mileage").value.trim();
     const technician = document.getElementById("technician").value.trim();
+    const ownerName = document.getElementById("serviceOwnerName").value.trim();
     const notes = document.getElementById("notes").value.trim();
 
-    if (!itemId || !serviceType || !technician) {
-      return alert("Isi Item ID, Jenis Servis, dan Nama Teknisi.");
+    if (!itemId || !serviceType || !technician || !mileage || !ownerName) {
+      return alert("Isi Item ID, Jenis Servis, KM, Nama Teknisi, dan Nama Pemilik.");
     }
 
     try {
       showLog("serviceLog", "Mengirim transaksi...", false);
-      const tx = await contract.addServiceRecord(itemId, serviceType, technician, notes);
+      const tx = await contract.addServiceRecord(itemId, serviceType, technician, ownerName, notes, mileage);
       showLog("serviceLog", "Menunggu konfirmasi blockchain...", false);
       await tx.wait();
       showLog("serviceLog", "Record servis berhasil ditambahkan!", false);
@@ -392,7 +388,6 @@
       itemInfoBox.innerHTML = `
         <div class="item-info">
           <div><span class="label">Nama Item</span>: ${item.itemName}</div>
-          <div><span class="label">Owner</span>: ${item.owner.slice(0,6)}...${item.owner.slice(-4)}</div>
           <div><span class="label">Item ID</span>: ${itemId}</div>
         </div>`;
 
@@ -403,8 +398,9 @@
           const date = new Date(r.timestamp.toNumber() * 1000).toLocaleString("id-ID");
           return `
             <div class="record">
-              <div class="type">${r.serviceType}</div>
+              <div class="type">${r.serviceType} (${r.mileage.toString()} KM)</div>
               <div>Teknisi: ${r.technician}</div>
+              <div>Pemilik: ${r.ownerName}</div>
               ${r.notes ? `<div>Catatan: ${r.notes}</div>` : ""}
               <div class="meta">${date}</div>
             </div>`;
